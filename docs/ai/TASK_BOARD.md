@@ -70,7 +70,7 @@ Next task: monitor OCR quality/latency and schedule the separate React Router up
 - Previous final-head CI: `34405307196 SUCCESS`.
 - Previous release deploy workflow: `34396457582 SUCCESS`.
 - Full: **1,487 tests / 87 files PASS**; focused: **819 tests / 40 files PASS**.
-- D1: **22 / 22 migrations PASS**; upgrade **0020 -> 0022 PASS**.
+- D1: **23 / 23 migrations PASS**; upgrade **0020 -> 0023 PASS**.
 - Existing rows preserved: **776 rows / 58 tables**.
 - Browser: **264 assertions / 36 phases PASS**.
 - Payment-adjacent: **82 tests / 7 files PASS**.
@@ -102,12 +102,12 @@ has not changed remote D1, production secrets or Worker traffic.
 ## Production cutover receipt (2026-09-10)
 
 - Worker readiness: `status=degraded`, `environment=production`, full commit
-  `d1b06732f8a80db4e77986df31ff28d9f04641fa`; active version
-  `48e0c366-3c8a-4f2b-a2d5-965785995431` at 100%.
+  `bdb0dda0b1123c4fd940058091e3cb285d5e8eb8`; active version
+  `df7225c9-6f20-4206-9f16-573de6a69c43` at 100%.
 - Landing/liveness/readiness smoke passed; readiness database/queue/AI/email are
   healthy/configured and only `CONFIG_PLUS_GRANT_SECRET_MISSING` remains as a
   warning.
-- Remote D1 exact ledger is `0001`-`0022`; schema gate passes and FK violations are `0`.
+- Remote D1 exact ledger is `0001`-`0023`; schema gate passes and FK violations are `0`.
 - Strict Week reconciliation passes 2/2 plans with 0 orphans and 0 mismatches.
 - Preserved counts: users 28, households 28, inventory items 13, recipes 59,
   meal plans 2, scan queue jobs 15, sessions 2 and auth OTPs 0.
@@ -126,7 +126,7 @@ has not changed remote D1, production secrets or Worker traffic.
 
 | Area | Candidate state | Release boundary |
 | --- | --- | --- |
-| Provider/model | Qwen `qwen3.7-flash` via DashScope international (`QWEN_BASE_URL`/`QWEN_MODEL`) is primary for vision, receipt OCR, chat and ranking; Groq is disabled unless `GROQ_FALLBACK_ENABLED=true`; Cloudflare vision fallback is opt-in via `CLOUDFLARE_VISION_FALLBACK`; DeepSeek requires `DEEPSEEK_FALLBACK_ENABLED=true` and GLM requires `GLM_FALLBACK_ENABLED=true` | Not deployed; current Worker remains the recorded `d1b06732` release |
+| Provider/model | Qwen `qwen3.7-flash` via DashScope international (`QWEN_BASE_URL`/`QWEN_MODEL`) is primary for vision, receipt OCR, chat and ranking; Groq is disabled unless `GROQ_FALLBACK_ENABLED=true`; Cloudflare vision fallback is opt-in via `CLOUDFLARE_VISION_FALLBACK`; DeepSeek requires `DEEPSEEK_FALLBACK_ENABLED=true` and GLM requires `GLM_FALLBACK_ENABLED=true` | Deployed at 100%; readiness `ai=configured` |
 | Output quality | Zod validation plus rejection of generic/placeholder labels and confidence below `0.6`; empty usable output is `AI_SCAN_NO_USABLE_ITEMS` | OCR remains untrusted draft data and requires review/confirmation |
 | Queue failures | Typed permanent `MODEL_NOT_FOUND`/auth/permission/license/schema/invalid-response/quality failures; bounded retries for `REQUEST_TIMEOUT`/`NETWORK_ERROR`/`RATE_LIMITED`/`UPSTREAM_ERROR` | Existing lease, idempotency, tenant fencing, max attempts and DLQ remain authoritative |
 | Schema/data | Additive `0023_scan_request_fingerprint.sql`; no backfill or inventory/auth/Week/PayOS change | Local and remote D1 cover `0001`-`0023`; Worker deploy remains pending |

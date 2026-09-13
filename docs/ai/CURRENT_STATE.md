@@ -33,10 +33,8 @@
 - OCR recovery branch: `codex/ocr-production-recovery`, based at `d8ca112a5ac5eb215f36a3f89b4218e2fc691371`;
   candidate implementation is committed at `ec87aec` and deployed through
   merge commit `bdb0dda0b1123c4fd940058091e3cb285d5e8eb8`.
-- At the 2026-09-12 audit, the remote `main` tree was source-equivalent to
-  `d8ca112`; its two commits ahead of the local branch were documentation-only
-  merge commits. Do not treat the OCR branch (or a later local docs commit) as
-  a GitHub or production release without a new receipt.
+- The 2026-09-13 PR #17 merge added the OCR recovery implementation to `main`;
+  production now reports the merge SHA and Worker version recorded below.
 - PRODUCTION_APPLICATION_BASE_SHA:
   `23ef51d6ec12a5a3e319a2d941dca39d2775cb9d`.
 - PRE_CLEANUP_MAIN_HEAD: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
@@ -45,8 +43,9 @@
 - Verified release head: `0420807968538f61b669569d064c404f67032174`.
 - Main head before this correction: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
 - The main merge tree is source-equivalent to the verified release head.
-- Every change after the application base in GitHub `main` is documentation-only;
-  the OCR recovery candidate is a feature-branch exception.
+- Changes after the historical application base now include the merged OCR
+  recovery implementation and its additive migration; the production receipt
+  is anchored to `bdb0dda0…`.
 
 ## Verification snapshot
 
@@ -82,8 +81,7 @@ schema/Week checks are recorded in the receipt below.
   value is never stored in the repository or logs. Existing secret names include
   `JWT_SECRET`,
   `OTP_HASH_SECRET`, `TURNSTILE_SECRET_KEY`, `QWEN_API_KEY` and optional
-  `GROQ_API_KEY`. The user-supplied test credential was not written to the
-  repository or production.
+  `GROQ_API_KEY`. The Qwen key value is not written to the repository or logs.
 
 ## Production cutover receipt (2026-09-10)
 

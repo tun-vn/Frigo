@@ -279,14 +279,13 @@ exact-head hosted CI; deployment and all payment work remain separate owner acti
 - Release gates: 124 tests, typecheck, lint, build, migration smoke và remote D1 schema gate pass; health production 200, `AI_MOCK_MODE=false`.
 - Queue message giữ MIME ảnh gốc từ data URL/R2 metadata; receipt review không còn dùng fixture giả khi refresh thiếu `scanId`.
 
-## OCR production-recovery candidate (2026-09-12) — NOT DEPLOYED
-- Nhánh `codex/ocr-production-recovery` đang chuẩn bị bản sửa phục hồi OCR; các
-  thay đổi code/config/test còn ở working tree và chưa có commit/deploy mới.
+## OCR production-recovery (2026-09-13) — DEPLOYED AND VERIFIED
+- Bản sửa phục hồi OCR đã merge qua PR #17 và deploy production; Worker version
+  `df7225c9-6f20-4206-9f16-573de6a69c43` đang phục vụ 100% traffic.
 - Candidate đặt Qwen `qwen3.7-flash` qua DashScope international làm provider
   chính cho vision, receipt OCR, chat và ranking. Groq, Cloudflare, DeepSeek và
-  GLM chỉ tham gia khi các cờ fallback tương ứng được bật; mặc định candidate
-  giữ tất cả fallback này ở `false`. Production hiện vẫn chạy Worker/release cũ
-  cho đến khi có exact-SHA CI, readiness và canary receipt.
+  GLM chỉ tham gia khi các cờ fallback tương ứng được bật; mặc định giữ tất cả
+  fallback này ở `false`.
 - Quality gate Zod + confidence `0.6` loại nhãn placeholder/generic và trả
   `AI_SCAN_NO_USABLE_ITEMS` khi không còn dòng dùng được; OCR vẫn là draft cần
   người dùng review/confirm, không phải nguồn sự thật cho giá/tồn kho/an toàn.
@@ -298,6 +297,5 @@ exact-head hosted CI; deployment and all payment work remain separate owner acti
   change hay thay đổi PayOS/auth/Week trong candidate.
 - Local candidate gates đã PASS ngày 2026-09-13: `pnpm check` chạy 1.579 test /
   93 file, lint, typecheck, migration replay tới `0023` và build. Live-provider
-  smoke, readiness, canary và Worker deployment vẫn
-  **PENDING**; hosted PR #17 CI `34728606704` đã PASS; không suy diễn từ các
-  gate lịch sử của M27.
+  smoke, readiness và Worker deployment đã PASS; hosted PR #17 CI `34728606704`
+  đã PASS. Cảnh báo duy nhất là `CONFIG_PLUS_GRANT_SECRET_MISSING`.
