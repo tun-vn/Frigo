@@ -185,7 +185,10 @@ rolling `qwen3.7-flash` alias is canary-only.
   post-unification T08-T12 Inventory Truth recertification and the unchanged
   production boundary. Local `main` remains `f6a48a1`; canonical main remains
   `github-frigo/main` at `05423f2`.
-- Publication status: branch is not yet present on `github-frigo`; next action
-  is a normal non-force push of `feat/qwen-ai-runtime-cost-router`, followed by
-  remote SHA verification. Do not merge, deploy, migrate remotely or alter
+- Publication status: **PUBLISHED FOR REVIEW** to `github-frigo` with a normal
+  non-force push; `git ls-remote` verified the published branch SHA matches the
+  local candidate, and canonical `main` remains unchanged at `05423f2`.
+  GitHub reported the repository relocation notice to `Tungjpstore/Frigo`, but
+  the push completed successfully. Next action is code review or a separately
+  authorized benchmark. Do not merge, deploy, migrate remotely or alter
   production.

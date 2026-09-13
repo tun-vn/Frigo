@@ -265,7 +265,8 @@ The deployed receipt is anchored to main SHA
 - `pnpm audit --prod` remains a known non-blocking follow-up: two moderate
   `react-router` advisories are fixed upstream at `>=7.18.0`; this task did not
   change dependencies.
-- Canonical remote publication is pending: `github-frigo` has no existing
-  candidate branch, so the next action is a normal non-force push followed by
-  remote SHA verification. Do not merge, migrate remotely or deploy this
-  branch.
+- Candidate publication is complete: `feat/qwen-ai-runtime-cost-router` was
+  pushed normally to `github-frigo`, and `git ls-remote` verified the remote
+  SHA against the local candidate. Canonical `main` remains unchanged at
+  `05423f2`; no merge, remote migration or deployment occurred. Next action is
+  code review or a separately authorized Qwen benchmark.

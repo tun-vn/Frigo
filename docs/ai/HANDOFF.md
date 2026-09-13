@@ -335,10 +335,12 @@ Verification recorded for this checkpoint:
   already probes the additive scan columns from migration `0023`, and the
   deployment documentation correctly scopes the native `AI` binding to the
   explicit `CLOUDFLARE_VISION_FALLBACK=true` path.
-- Publication checkpoint: the canonical remote has no existing
-  `feat/qwen-ai-runtime-cost-router` branch, so the next action is a normal
-  non-force push and `git ls-remote` SHA verification. No merge, deployment,
-  remote migration or production change has occurred.
+- Publication checkpoint: `feat/qwen-ai-runtime-cost-router` is now published
+  on `github-frigo` by a normal non-force push; `git ls-remote` verified the
+  remote branch SHA matches the local candidate and canonical `main` remains
+  `05423f2`. GitHub emitted only the repository-relocation notice to
+  `Tungjpstore/Frigo`; no merge, deployment, remote migration or production
+  change has occurred.
 
 Next action after publication: request code review or a separately authorized
 Qwen benchmark, then promote a pinned alias only through the documented
