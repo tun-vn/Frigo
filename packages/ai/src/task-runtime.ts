@@ -266,11 +266,16 @@ export class QwenTaskRuntime {
             && this.shouldShadow()
             && totalTokens + shadowReservation <= this.governance.maxTotalTokensPerOperation
             && this.backgroundExecutor) {
-          // Reserve the optional shadow call before it is detached from this
-          // operation so canary traffic cannot bypass the operation ceilings.
+          // Reserve the optional shadow call before scheduling it so canary
+          // traffic cannot bypass the operation ceilings.
           reservedCalls += 1;
           totalTokens += shadowReservation;
-          this.backgroundExecutor(this.runShadow(request, shadowInputTokens, maxOutputTokens).catch(() => undefined));
+          try {
+            this.backgroundExecutor(this.runShadow(request, shadowInputTokens, maxOutputTokens).catch(() => undefined));
+          } catch {
+            // A host scheduler failure must never turn a successful primary
+            // response into a retry or user-visible AI error.
+          }
         }
         return { value: parsed as T, usage, attempts: index + 1, logicalModel: role, physicalModel: alias.physicalModel };
       } catch (error) {
