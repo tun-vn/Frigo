@@ -254,5 +254,8 @@ The deployed receipt is anchored to main SHA
   lint, typecheck, migration replay and production build all PASS. The check
   intentionally skipped remote D1 schema and Week parity because no release
   flag was supplied. `pnpm ai:eval -- --dry-run` and `git diff --check` PASS.
+- `pnpm audit --prod` remains a known non-blocking follow-up: two moderate
+  `react-router` advisories are fixed upstream at `>=7.18.0`; this task did not
+  change dependencies.
 - Next action: request code review or a separately authorized benchmark. Do not
   merge, migrate remotely or deploy this branch.

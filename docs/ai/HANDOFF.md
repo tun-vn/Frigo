@@ -313,6 +313,9 @@ Verification recorded for this checkpoint:
 - `git diff --check`: PASS after the documentation edits.
 - Focused governance/configuration/explanation suite: 102/102 PASS after the
   shadow reservation guard; queue/idempotency regression coverage remains green.
+- `pnpm audit --prod`: FAIL (2 moderate `react-router` advisories; patched
+  upstream at `>=7.18.0`). This pre-existing dependency follow-up is outside
+  the Qwen runtime scope; no package upgrade was made in this checkpoint.
 - Secret scan, protected-path scan and provider/model search were clean. No
   PayOS/payment, unrelated auth, remote migration, merge or deployment action
   was performed.
