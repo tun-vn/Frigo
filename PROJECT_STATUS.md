@@ -257,14 +257,19 @@ exact-head hosted CI; deployment and all payment work remain separate owner acti
 - Core loop đã khá sát production, nhưng vẫn còn gap route integration/E2E/concurrency cho rollback D1, tenancy và offline replay.
 - Week v2 là shadow snapshot một lần; mutation mới vẫn chỉ cập nhật v1 nên cần dual-write + reconciliation trước cutover.
 - Scan producer đã bật ở production; tiếp tục theo dõi backlog và tỷ lệ failed sau rollout.
-- Groq production secret đã cấu hình; model vision đang dùng `qwen/qwen3.6-27b` vì model Scout trong kế hoạch cũ đã bị Groq loại khỏi catalog hiện tại.
+- Groq production secret đã cấu hình; M27's earlier smoke used
+  `qwen/qwen3.6-27b` after Scout returned `model_not_found`. This is historical
+  evidence for that rollout, not proof of the current d1b06732 runtime.
 
 ## Next
 - Theo dõi queue latency/retry/DLQ và tỷ lệ scan failed sau rollout async; rollback nhanh bằng `SCAN_QUEUE_MODE=sync` nếu backlog hoặc lỗi tăng bất thường.
 - Xác minh địa chỉ nhận email trong Cloudflare Email Routing để OTP gửi qua Workers email binding tới được hộp thư người dùng (hiện binding đã cấu hình, cần verify destination).
 - Kiểm chứng luồng OTP email thật end-to-end trên production (đăng ký tài khoản thật và xác nhận email đến hộp thư).
 
-## M27: Groq Vision + Async Scan Rollout (2026-09-07) — DEPLOYED LIVE
+## M27: Groq Vision + Async Scan Rollout (2026-09-07) — HISTORICAL DEPLOYMENT
+- This section records the original M27 rollout evidence only. The later
+  2026-09-10 production receipt is authoritative for the current release, and
+  the OCR recovery candidate below has not been deployed.
 - Tạo Groq key `frigo-production-vision` bằng tài khoản đã đăng nhập; chỉ lưu qua Cloudflare Secret `GROQ_API_KEY`, không đưa vào repository/logs.
 - Thêm `GroqProvider` và router priority `Groq -> Cloudflare Workers AI -> Qwen -> GLM`; parse JSON fail-closed, chuẩn hóa unit/category/storage và usage log không chứa ảnh/key.
 - Groq smoke bằng PNG hợp lệ không PII đạt HTTP 200 với model `qwen/qwen3.6-27b`; model Scout cũ trả `model_not_found` nên đã chuyển default theo catalog vision hiện tại.
@@ -273,3 +278,26 @@ exact-head hosted CI; deployment and all payment work remain separate owner acti
 - Worker version `8ef81bdc-1346-481d-a945-583e8ae82006` live với `SCAN_QUEUE_MODE=async`; bindings xác nhận producer `frigo-scan-queue`, consumer và DLQ `frigo-scan-dlq`.
 - Release gates: 124 tests, typecheck, lint, build, migration smoke và remote D1 schema gate pass; health production 200, `AI_MOCK_MODE=false`.
 - Queue message giữ MIME ảnh gốc từ data URL/R2 metadata; receipt review không còn dùng fixture giả khi refresh thiếu `scanId`.
+
+## OCR production-recovery candidate (2026-09-12) — NOT DEPLOYED
+- Nhánh `codex/ocr-production-recovery` đang chuẩn bị bản sửa phục hồi OCR; các
+  thay đổi code/config/test còn ở working tree và chưa có commit/deploy mới.
+- Candidate đặt Qwen `qwen3.7-flash` qua DashScope international làm provider
+  chính cho vision, receipt OCR, chat và ranking. Groq, Cloudflare, DeepSeek và
+  GLM chỉ tham gia khi các cờ fallback tương ứng được bật; mặc định candidate
+  giữ tất cả fallback này ở `false`. Production hiện vẫn chạy Worker/release cũ
+  cho đến khi có exact-SHA CI, readiness và canary receipt.
+- Quality gate Zod + confidence `0.6` loại nhãn placeholder/generic và trả
+  `AI_SCAN_NO_USABLE_ITEMS` khi không còn dòng dùng được; OCR vẫn là draft cần
+  người dùng review/confirm, không phải nguồn sự thật cho giá/tồn kho/an toàn.
+- Queue phân loại lỗi provider: model/auth/permission/license/schema/quality là
+  permanent; timeout/network/429/5xx/upstream mới được retry trong giới hạn
+  attempts/DLQ hiện có. Candidate thêm migration additive
+  `0023_scan_request_fingerprint.sql` để ràng buộc replay với đúng ảnh/MIME; phải
+  apply và schema-gate migration này trước deploy. Không có backfill, secret
+  change hay thay đổi PayOS/auth/Week trong candidate.
+- Local candidate gates đã PASS ngày 2026-09-13: `pnpm check` chạy 1.579 test /
+  93 file, lint, typecheck, migration replay tới `0023` và build. Live-provider
+  smoke, migration/apply remote, readiness, canary và deployment vẫn
+  **PENDING**; hosted PR #17 CI `34728606704` đã PASS; không suy diễn từ các
+  gate lịch sử của M27.

@@ -185,8 +185,10 @@ describe('D1 scan quota and request idempotency', () => {
       method: 'POST', headers: { Cookie: `${SESSION_COOKIE}=token-${user}`, Origin: 'https://frigo.example.com',
         'Content-Type': 'application/json', 'Idempotency-Key': key },
       body: JSON.stringify({ imageBase64: 'aGVsbG8=', ...extra }),
-    }, { DB: db, APP_URL: 'https://frigo.example.com', ENVIRONMENT: 'production',
-      SCAN_QUEUE_MODE: queue ? 'async' : 'sync', SCAN_QUEUE: queue } as unknown as Env);
+    }, { DB: db, CACHE: { get: async () => null, put: async () => undefined },
+      APP_URL: 'https://frigo.example.com', ENVIRONMENT: 'production',
+      SCAN_QUEUE_MODE: queue ? 'async' : 'sync', SCAN_QUEUE: queue,
+      IMAGES: undefined } as unknown as Env);
   }
 
   it('recovers the same synchronous operation and results after a lost response', async () => {
@@ -198,6 +200,74 @@ describe('D1 scan quota and request idempotency', () => {
     expect(vision).toHaveBeenCalledTimes(1);
     expect(usage()).toBe(1);
     expect(db.query('SELECT * FROM scans')).toHaveLength(1);
+  });
+
+  it('binds an idempotency key to the original image bytes and MIME type', async () => {
+    const first = await request('fingerprint-command', undefined, {
+      imageBase64: 'aGVsbG8=',
+    });
+    expect(first.status).toBe(200);
+    const changedBytes = await request('fingerprint-command', undefined, {
+      imageBase64: 'd29ybGQ=',
+    });
+    expect(changedBytes.status).toBe(409);
+    expect(await changedBytes.json()).toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+
+    const changedMime = await request('mime-command', undefined, {
+      imageBase64: 'data:image/jpeg;base64,aGVsbG8=',
+    });
+    expect(changedMime.status).toBe(200);
+    const mimeReplay = await request('mime-command', undefined, {
+      imageBase64: 'data:image/png;base64,aGVsbG8=',
+    });
+    expect(mimeReplay.status).toBe(409);
+    expect(await mimeReplay.json()).toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    expect(vision).toHaveBeenCalledTimes(2);
+    expect(usage()).toBe(2);
+  });
+
+  it('rejects an empty image before reserving quota or creating a scan row', async () => {
+    const response = await request('empty-image', undefined, { imageBase64: '' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'IMAGE_REQUIRED' });
+    expect(usage()).toBe(0);
+    expect(db.query('SELECT * FROM scans')).toHaveLength(0);
+    expect(vision).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['MODEL_NOT_FOUND', false, 503, 'tạm thời không khả dụng'],
+    ['AI_SCAN_NO_USABLE_ITEMS', false, 422, 'Không nhận diện được dữ liệu đủ rõ'],
+    ['REQUEST_TIMEOUT', true, 504, 'phản hồi quá lâu'],
+  ] as const)('returns a sanitized synchronous scan failure for %s', async (code, retryable, status, message) => {
+    vision.mockRejectedValueOnce({
+      code,
+      retryable,
+      message: `PRIVATE_PROVIDER_DETAIL_${code}`,
+    });
+
+    const response = await request(`sync-failure-${code}`);
+    expect(response.status).toBe(status);
+    const body = await response.json() as Record<string, unknown>;
+    expect(body).toMatchObject({ code, retryable });
+    expect(String(body.error)).toContain(message);
+    expect(JSON.stringify(body)).not.toContain('PRIVATE_PROVIDER_DETAIL');
+    expect(usage()).toBe(0);
+  });
+
+  it('returns the same sanitized failure contract for synchronous receipt OCR', async () => {
+    vision.mockRejectedValueOnce({
+      code: 'INVALID_RESPONSE',
+      retryable: false,
+      message: 'PRIVATE_RECEIPT_PROVIDER_DETAIL',
+    });
+
+    const response = await request('sync-receipt-failure', undefined, {}, 'a', 'receipt');
+    expect(response.status).toBe(422);
+    const body = await response.json() as Record<string, unknown>;
+    expect(body).toMatchObject({ code: 'INVALID_RESPONSE', retryable: false });
+    expect(JSON.stringify(body)).not.toContain('PRIVATE_RECEIPT_PROVIDER_DETAIL');
+    expect(usage()).toBe(0);
   });
 
   it('returns one logical operation for concurrent uploads, not duplicate AI work', async () => {
@@ -214,12 +284,35 @@ describe('D1 scan quota and request idempotency', () => {
     const queue = { send: vi.fn(async (message) => { messages.push(message); if (messages.length === 1) throw new Error('accepted but response lost'); }) };
     expect((await request('queue-command', queue)).status).toBe(503);
     expect(usage()).toBe(1);
+    expect(db.query('SELECT status, error_code FROM scan_queue_jobs')).toEqual([{ status: 'pending', error_code: null }]);
     const retry = await request('queue-command', queue);
     expect(retry.status).toBe(202);
     expect(messages).toHaveLength(2);
     expect(messages[0]).toEqual(messages[1]);
     expect(usage()).toBe(1);
     expect(db.query('SELECT status FROM scan_quota_ledger')).toEqual([{ status: 'consumed' }]);
+  });
+
+  it('does not turn a failed synchronous replay into a success response', async () => {
+    vision.mockRejectedValueOnce({
+      code: 'MODEL_NOT_FOUND',
+      retryable: false,
+      message: 'PRIVATE_MODEL_DETAIL',
+    }).mockRejectedValueOnce({
+      code: 'MODEL_NOT_FOUND',
+      retryable: false,
+      message: 'PRIVATE_MODEL_DETAIL',
+    });
+    const first = await request('failed-replay');
+    expect(first.status).toBe(503);
+    expect(db.query('SELECT status FROM scans')).toEqual([{ status: 'failed' }]);
+
+    const replay = await request('failed-replay');
+    expect(replay.status).toBe(503);
+    const body = await replay.json() as Record<string, unknown>;
+    expect(body).toMatchObject({ code: 'MODEL_NOT_FOUND', retryable: false });
+    expect(body.success).not.toBe(true);
+    expect(JSON.stringify(body)).not.toContain('PRIVATE_MODEL_DETAIL');
   });
 
   it('ignores client Plus/quota hints and expired server Plus entitlements', async () => {

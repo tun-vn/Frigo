@@ -37,12 +37,15 @@ return deterministic reason IDs without calling a provider. Basic plan list/deta
 reads, generation, swaps and shopping do not call AI. Explanation is on-demand.
 
 `meal-planning-explanation.ts` reuses existing `AIRouter` and its native
-`CloudflareAIProvider` transport with a bounded binding adapter. The adapter fixes
-the existing `@cf/meta/llama-3.1-8b-instruct` model, structured messages,
-temperature 0 and a **256 output-token** cap, never tools or streaming. One call
-only, no automatic retry/fan-out. Existing external provider chat implementations
-are deliberately not used: they do not expose equivalent bounded-output controls.
-No provider keys or new dependencies/configuration are added.
+`CloudflareAIProvider` transport with a bounded binding adapter. For this T06B
+explanation route, the adapter fixes the existing
+`@cf/meta/llama-3.1-8b-instruct` model, structured messages, temperature 0 and a
+**256 output-token** cap, never tools or streaming. One call only, no automatic
+retry/fan-out. Existing external provider chat implementations are deliberately
+not used for explanations: they do not expose equivalent bounded-output
+controls. T06B added no provider keys or configuration; the later OCR recovery
+candidate has its own Qwen/fallback configuration and is documented separately
+in `CURRENT_STATE.md` and `DEPLOYMENT.md`.
 
 The caller waits at most **2500 ms** for the provider. Timeout returns the full
 deterministic ID set; late output is ignored. The native binding interface does not

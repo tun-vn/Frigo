@@ -10,15 +10,21 @@ AI_GATEWAY_URL=
 
 # Primary Vision Provider: Qwen (Alibaba Cloud / DashScope)
 QWEN_API_KEY=your_qwen_api_key_here
-QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+QWEN_MODEL=qwen3.7-flash
 
 # Fallback Vision & Text Provider: GLM / Z.ai (Zhipu AI)
 ZAI_API_KEY=your_zai_api_key_here
 ZAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+GLM_FALLBACK_ENABLED=false
 
 # Primary Recipe Ranking & Reasoning: DeepSeek
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_FALLBACK_ENABLED=false
+
+# Legacy Groq adapter (disabled when Qwen is configured)
+GROQ_FALLBACK_ENABLED=false
 
 # Auth Adapters
 JWT_SECRET=

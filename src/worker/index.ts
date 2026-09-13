@@ -21,6 +21,8 @@ import { mealPlanningRoutes } from './routes/meal-planning';
 import { processScanJob, ScanQueueError } from './services/scan-queue';
 import { billingRoutes } from './routes/billing';
 
+const SCAN_RETRY_DELAY_SECONDS = 5;
+
 type WorkerVariables = { auth: AuthContext; requestId: string };
 type WorkerApp = { Bindings: Env; Variables: WorkerVariables };
 
@@ -161,7 +163,7 @@ export default {
         const retryable = error instanceof ScanQueueError ? error.retryable : true;
         if (retryable) {
           console.warn('[Queue] Retryable scan job failure', error);
-          msg.retry({ delaySeconds: 30 });
+          msg.retry({ delaySeconds: SCAN_RETRY_DELAY_SECONDS });
         } else {
           // Permanent failures are acknowledged after being persisted as
           // failed; this prevents poison messages from blocking the queue.

@@ -36,13 +36,20 @@
 - Production Reconciliation ✅ COMPLETE - post-cutover verified
 - Production DB Migration ✅ COMPLETE - `frigo-db` ledger `0001`-`0022`
 - Controlled Production Deployment ✅ COMPLETE - Worker SHA `d1b06732`
+- OCR production recovery (maintenance) ⏳ IN PROGRESS - candidate not deployed
 - Planner Rollout ⏳
 
-Do not invent T08. Planner rollout remains separately authorized work.
+Do not invent T08. OCR recovery is a bounded maintenance candidate, not a new
+product task or a production deployment. Planner rollout remains separately
+authorized work.
 
 GitHub source of truth: main.
 Deployed application SHA: `d1b06732f8a80db4e77986df31ff28d9f04641fa`.
-Post-deployment main changes are documentation-only receipt merges.
+Post-deployment GitHub `main` changes are documentation-only receipt merges; the
+OCR candidate is committed on its feature branch and is not deployed.
+Current `github-frigo/main`: `db2377fd9f63d1be38ce3882c6d8173e0bf9e497`;
+the `codex/ocr-production-recovery` branch contains candidate code/config/tests
+and must not be represented as deployed.
 Release Integration: COMPLETE.
 Main Integration: COMPLETE.
 PRE_CLEANUP_MAIN_HEAD: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
@@ -51,7 +58,8 @@ Production reconciliation: COMPLETE - schema/code/health/traffic verified.
 Production DB migration: COMPLETE - exact ledger `0001` through `0022`.
 Production deployment: COMPLETE - version `48e0c366-3c8a-4f2b-a2d5-965785995431`.
 Planner rollout: NOT STARTED.
-Next task: POST-DEPLOY MONITORING / FUTURE GUARDED WORKFLOW SETUP.
+OCR recovery status: IN PROGRESS - VALIDATION PENDING.
+Next task: COMPLETE OCR RECOVERY VALIDATION BEFORE GUARDED DEPLOYMENT.
 
 ## Frozen release evidence
 
@@ -87,6 +95,10 @@ No real payment performed.
 Local production source checkout is untouched; the production D1 schema was
 updated only through the approved additive migrations.
 
+The OCR recovery worktree is separate from the production checkout. It adds the
+unapplied candidate migration `0023_scan_request_fingerprint.sql` locally and
+has not changed remote D1, production secrets or Worker traffic.
+
 ## Production cutover receipt (2026-09-10)
 
 - Worker readiness: `status=degraded`, `environment=production`, full commit
@@ -109,3 +121,19 @@ updated only through the approved additive migrations.
 - Follow-up: test and schedule the React Router `>=7.18.0` upgrade for the two
   moderate production dependency advisories; do not patch it ad hoc in this
   receipt-only cutover.
+
+## OCR production-recovery candidate (2026-09-12)
+
+| Area | Candidate state | Release boundary |
+| --- | --- | --- |
+| Provider/model | Qwen `qwen3.7-flash` via DashScope international (`QWEN_BASE_URL`/`QWEN_MODEL`) is primary for vision, receipt OCR, chat and ranking; Groq is disabled unless `GROQ_FALLBACK_ENABLED=true`; Cloudflare vision fallback is opt-in via `CLOUDFLARE_VISION_FALLBACK`; DeepSeek requires `DEEPSEEK_FALLBACK_ENABLED=true` and GLM requires `GLM_FALLBACK_ENABLED=true` | Not deployed; current Worker remains the recorded `d1b06732` release |
+| Output quality | Zod validation plus rejection of generic/placeholder labels and confidence below `0.6`; empty usable output is `AI_SCAN_NO_USABLE_ITEMS` | OCR remains untrusted draft data and requires review/confirmation |
+| Queue failures | Typed permanent `MODEL_NOT_FOUND`/auth/permission/license/schema/invalid-response/quality failures; bounded retries for `REQUEST_TIMEOUT`/`NETWORK_ERROR`/`RATE_LIMITED`/`UPSTREAM_ERROR` | Existing lease, idempotency, tenant fencing, max attempts and DLQ remain authoritative |
+| Schema/data | Additive `0023_scan_request_fingerprint.sql`; no backfill or inventory/auth/Week/PayOS change | Local candidate covers `0001`-`0023`; remote D1 remains at `0022` until explicit guarded migration before deploy |
+| Verification | Local `pnpm check` and hosted PR #17 CI run `34728606704` PASS on 2026-09-13: 1,579 tests / 93 files, lint, typecheck, migration replay through 0023 and build; live-provider/canary evidence pending (B.AI `/v1/models` probe returned 401) | Do not claim release or readiness until exact-SHA receipts exist |
+
+Candidate commits `ec87aec` and `56968ba` are pushed on
+`codex/ocr-production-recovery`. Local and hosted validation is complete; the
+next owner action is to obtain authorized live Qwen smoke evidence, then perform
+the guarded migration/deploy sequence. Keep this item IN PROGRESS until those
+receipts exist.

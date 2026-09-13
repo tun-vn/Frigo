@@ -1,6 +1,12 @@
 import { AIProvider, VisionScanParams } from '../types';
 import { VisionScanResult, VisionScanResultSchema } from '../schemas';
 import { findCanonicalIngredient } from '@frigo/domain';
+import {
+  createAIHttpError,
+  createAINetworkError,
+  createAIResponseError,
+  isAIProviderError,
+} from '../errors';
 
 export class GLMProvider implements AIProvider {
   name = 'glm';
@@ -88,18 +94,33 @@ Hãy phân tích hình ảnh và trả về JSON chuẩn xác:
   }
 
   async chat(prompt: string): Promise<string> {
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'glm-4-flash',
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data: any = await res.json();
-    return data.choices?.[0]?.message?.content || '';
+    try {
+      const res = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'glm-4-flash',
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      if (!res.ok) throw createAIHttpError('GLM', res.status, await res.text(), 'glm-4-flash');
+      let data: { choices?: Array<{ message?: { content?: unknown } }> };
+      try {
+        data = await res.json() as typeof data;
+      } catch (error) {
+        throw createAIResponseError('GLM', 'GLM returned an invalid JSON envelope', 'glm-4-flash', error);
+      }
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || !content.trim()) {
+        throw createAIResponseError('GLM', 'GLM returned an empty chat response', 'glm-4-flash');
+      }
+      return content.trim();
+    } catch (error) {
+      if (isAIProviderError(error)) throw error;
+      throw createAINetworkError('GLM', error, 'glm-4-flash');
+    }
   }
 }

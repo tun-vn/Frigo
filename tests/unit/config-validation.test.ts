@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateEnvironment } from '../../src/worker/config/validation';
+import { getEffectiveVisionProviders, validateEnvironment } from '../../src/worker/config/validation';
 import type { Env } from '../../src/worker/types';
 
 function productionEnv(overrides: Partial<Env> = {}): Env {
@@ -12,7 +12,9 @@ function productionEnv(overrides: Partial<Env> = {}): Env {
     DB: {} as Env['DB'],
     CACHE: {} as Env['CACHE'],
     AI: {},
+    QWEN_API_KEY: 'qwen-test-key',
     SCAN_QUEUE: {} as Env['SCAN_QUEUE'],
+    IMAGES: {} as Env['IMAGES'],
     JWT_SECRET: 's'.repeat(40),
     OTP_HASH_SECRET: 'otp'.repeat(16),
     TURNSTILE_SITE_KEY: 'test-site-key',
@@ -22,6 +24,20 @@ function productionEnv(overrides: Partial<Env> = {}): Env {
 }
 
 describe('validateEnvironment', () => {
+  it('reports only explicitly enabled fallback providers as effective', () => {
+    expect(getEffectiveVisionProviders({
+      AI_MOCK_MODE: 'false',
+      QWEN_API_KEY: 'qwen-key',
+      ZAI_API_KEY: 'glm-key',
+    })).toEqual(['qwen']);
+
+    expect(getEffectiveVisionProviders({
+      AI_MOCK_MODE: 'false',
+      ZAI_API_KEY: 'glm-key',
+      GLM_FALLBACK_ENABLED: 'true',
+    })).toEqual(['glm']);
+  });
+
   it('accepts a well-formed production configuration', () => {
     const result = validateEnvironment(productionEnv());
     expect(result.ok).toBe(true);
@@ -101,9 +117,56 @@ describe('validateEnvironment', () => {
     expect(codes).not.toContain('CONFIG_QUEUE_BINDING_MISSING');
   });
 
-  it('requires the AI binding when mock mode is off', () => {
-    const result = validateEnvironment(productionEnv({ AI: undefined }));
+  it('requires the AI binding when the Cloudflare vision fallback is enabled', () => {
+    const result = validateEnvironment(productionEnv({ AI: undefined, CLOUDFLARE_VISION_FALLBACK: 'true' }));
     expect(result.fatal.map((i) => i.code)).toContain('CONFIG_AI_BINDING_MISSING');
+  });
+
+  it.each([undefined, '', '  '])('rejects a missing or blank Qwen API key in production (%s)', (QWEN_API_KEY) => {
+    const result = validateEnvironment(productionEnv({ QWEN_API_KEY }));
+    expect(result.ok).toBe(false);
+    expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_QWEN_API_KEY_MISSING');
+  });
+
+  it('accepts Qwen-only production without a native AI binding', () => {
+    const result = validateEnvironment(productionEnv({ AI: undefined }));
+    expect(result.fatal.map((issue) => issue.code)).not.toContain('CONFIG_AI_BINDING_MISSING');
+    expect(result.ok).toBe(true);
+  });
+
+  it('requires R2 image storage for production async scans', () => {
+    const result = validateEnvironment(productionEnv({ IMAGES: undefined }));
+    expect(result.ok).toBe(false);
+    expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_SCAN_IMAGE_STORAGE_MISSING');
+  });
+
+  it.each([
+    undefined,
+    '',
+    '   ',
+    'http://qwen.example.com',
+    'https://user:password@qwen.example.com/v1',
+    'https://qwen.example.com\u0000/v1',
+  ])('rejects an invalid explicit QWEN_BASE_URL (%s)', (QWEN_BASE_URL) => {
+    const result = validateEnvironment(productionEnv({ QWEN_BASE_URL }));
+    if (QWEN_BASE_URL === undefined) {
+      expect(result.fatal.map((issue) => issue.code)).not.toContain('CONFIG_QWEN_BASE_URL_INVALID');
+    } else {
+      expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_QWEN_BASE_URL_INVALID');
+    }
+  });
+
+  it.each(['', '   ', '\u0000qwen'])('rejects an invalid explicit QWEN_MODEL (%s)', (QWEN_MODEL) => {
+    const result = validateEnvironment(productionEnv({ QWEN_MODEL }));
+    expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_QWEN_MODEL_INVALID');
+  });
+
+  it('accepts a public HTTPS Qwen endpoint and model identifier', () => {
+    const result = validateEnvironment(productionEnv({
+      QWEN_BASE_URL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      QWEN_MODEL: 'qwen3.7-flash',
+    }));
+    expect(result.fatal).toEqual([]);
   });
 
   it.each([undefined, '', '  '])('rejects a missing or blank production Turnstile secret (%s)', (TURNSTILE_SECRET_KEY) => {

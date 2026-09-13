@@ -46,6 +46,11 @@
     "AI_MOCK_MODE": "true",
     "SCAN_QUEUE_MODE": "sync",
     "WEEK_SCHEMA_MODE": "dual",
+    "GROQ_FALLBACK_ENABLED": "false",
+    "CLOUDFLARE_VISION_FALLBACK": "false",
+    "GLM_FALLBACK_ENABLED": "false",
+    "DEEPSEEK_FALLBACK_ENABLED": "false",
+    "CLEANUP_RESERVED_SCAN_RETENTION_MINUTES": "60",
     // Cloudflare PUBLISHED Turnstile test keys (always pass). Never use these
     // in production.
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA"

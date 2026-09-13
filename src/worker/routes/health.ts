@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../types';
-import { validateEnvironment } from '../config/validation';
+import { getAIServiceStatus, validateEnvironment } from '../config/validation';
 
 /**
  * Public observability endpoints, mounted OUTSIDE the auth-protected API
@@ -30,6 +30,11 @@ healthRoutes.get('/health/ready', async (c) => {
   if (env.DB) {
     try {
       await env.DB.prepare('SELECT 1 AS ok').first();
+      // Candidate scan paths read these additive columns before any provider
+      // call; fail readiness instead of accepting traffic against schema 0022.
+      await env.DB.prepare(
+        'SELECT request_fingerprint, image_mime_type FROM scans LIMIT 0',
+      ).all();
     } catch {
       database = 'error';
     }
@@ -51,7 +56,10 @@ healthRoutes.get('/health/ready', async (c) => {
       services: {
         database,
         queue: env.SCAN_QUEUE ? 'ok' : env.SCAN_QUEUE_MODE === 'async' ? 'error' : 'disabled',
-        ai: env.AI ? 'configured' : env.AI_MOCK_MODE === 'true' ? 'mock' : 'disabled',
+        // Reflect the providers AIRouter can actually construct. In
+        // particular, a native AI binding alone is not an OCR capability when
+        // its explicit fallback flag is disabled.
+        ai: getAIServiceStatus(env),
         email: env.SEND_EMAIL || env.RESEND_API_KEY ? 'configured' : 'disabled',
         rateLimiting: env.CACHE
           ? env.RATE_LIMIT_ENFORCEMENT === 'fail-closed'

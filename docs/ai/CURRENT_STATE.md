@@ -1,5 +1,8 @@
 # Frigo current state - final PR metadata reconciled
 
+> This checkpoint retains the historical production receipt and separately tracks
+> the unreleased OCR recovery candidate dated 2026-09-12.
+
 ## Release status
 
 - T01-T07: COMPLETE.
@@ -16,6 +19,7 @@
 - Main Integration: **COMPLETE**
 - Main CI: **PASS**
 - Production reconciliation: **COMPLETE - SCHEMA AND WORKER CUTOVER VERIFIED** (2026-09-10).
+- OCR production recovery: **IN PROGRESS - CANDIDATE NOT DEPLOYED** (2026-09-12).
 
 ## Authoritative source
 
@@ -23,6 +27,16 @@
 - Deployed application SHA: `d1b06732f8a80db4e77986df31ff28d9f04641fa`.
 - Commits after the deployed application are documentation-only receipt merges;
   verify the current `main` head from GitHub when preparing a later release.
+- Current `github-frigo/main` observed 2026-09-12: `db2377fd9f63d1be38ce3882c6d8173e0bf9e497`.
+- GitHub API redirects `vn-2c/Frigo` to canonical public repository
+  `Tungjpstore/Frigo`; the configured `github-frigo` remote remains the alias.
+- OCR recovery branch: `codex/ocr-production-recovery`, based at `d8ca112a5ac5eb215f36a3f89b4218e2fc691371`;
+  candidate implementation is committed at `ec87aec` with documentation
+  checkpoint `56968ba`; it is not present in the deployed application.
+- At the 2026-09-12 audit, the remote `main` tree was source-equivalent to
+  `d8ca112`; its two commits ahead of the local branch were documentation-only
+  merge commits. Do not treat the OCR branch (or a later local docs commit) as
+  a GitHub or production release without a new receipt.
 - PRODUCTION_APPLICATION_BASE_SHA:
   `23ef51d6ec12a5a3e319a2d941dca39d2775cb9d`.
 - PRE_CLEANUP_MAIN_HEAD: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
@@ -31,7 +45,8 @@
 - Verified release head: `0420807968538f61b669569d064c404f67032174`.
 - Main head before this correction: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
 - The main merge tree is source-equivalent to the verified release head.
-- Every change after the application base is documentation-only.
+- Every change after the application base in GitHub `main` is documentation-only;
+  the OCR recovery candidate is a feature-branch exception.
 
 ## Verification snapshot
 
@@ -60,8 +75,14 @@ schema/Week checks are recorded in the receipt below.
 - Production deployment: **COMPLETE** - Worker deployed directly with Wrangler OAuth from clean SHA `d1b06732f8a80db4e77986df31ff28d9f04641fa` because the GitHub production environment/secrets are not provisioned.
 - Production reconciliation: **COMPLETE** - post-cutover source, schema, health and traffic checks passed.
 - Active deployment: Cloudflare version `48e0c366-3c8a-4f2b-a2d5-965785995431`, 100% traffic, deployed 2026-09-10T21:08:00Z.
+- OCR recovery candidate: **NOT DEPLOYED**. No remote migration, production
+  deploy, secret change or live-provider smoke was performed for this candidate;
+  the deployed source SHA still predates the typed provider/quality-gate changes.
 - Planner rollout: NOT STARTED.
-- No production secrets were changed; existing secret names include `JWT_SECRET`, `OTP_HASH_SECRET`, `TURNSTILE_SECRET_KEY` and `GROQ_API_KEY`.
+- No production secrets were changed; existing secret names include `JWT_SECRET`,
+  `OTP_HASH_SECRET`, `TURNSTILE_SECRET_KEY`, `QWEN_API_KEY` and optional
+  `GROQ_API_KEY`. The user-supplied test credential was not written to the
+  repository or production.
 
 ## Production cutover receipt (2026-09-10)
 
@@ -87,6 +108,44 @@ Verified against `https://frigo.tungjpstore.net` after the cutover:
   `GIT_COMMIT` injection only; no planner flag, PayOS/payment path or secret
   value was changed.
 
+## OCR production-recovery candidate (2026-09-12)
+
+The candidate addresses provider/model recovery and scan failure handling without
+changing the production receipt above:
+
+- Candidate schema now includes additive migration `0023_scan_request_fingerprint.sql`;
+  local replay and schema checks must cover `0001`-`0023`. Production D1 remains
+  at `0022` until this migration is explicitly applied during the guarded release.
+
+- Qwen `qwen3.7-flash` is the primary provider for vision, receipt OCR, chat and
+  recipe ranking through the DashScope international OpenAI-compatible endpoint
+  (`QWEN_BASE_URL`, `QWEN_MODEL`); structured requests disable thinking. Groq is
+  retained only as an explicit legacy fallback (`GROQ_FALLBACK_ENABLED=true`),
+  and is disabled in the candidate vars.
+- Native Cloudflare vision remains opt-in through
+  `CLOUDFLARE_VISION_FALLBACK=false`. DeepSeek remains the optional text/ranking
+  fallback when `DEEPSEEK_FALLBACK_ENABLED=true`, and Z.ai/GLM the optional
+  vision/text extension path when `GLM_FALLBACK_ENABLED=true`; a GLM-5.3 Flash
+  upgrade is future work and is not claimed as active.
+- Vision and receipt responses pass Zod validation plus a deterministic quality
+  gate: generic/placeholder labels and confidence below `0.6` are removed;
+  no usable rows return `AI_SCAN_NO_USABLE_ITEMS` instead of a fabricated draft.
+- Typed provider errors classify permanent `MODEL_NOT_FOUND`, auth/permission,
+  license, schema/invalid-response and quality failures separately from retryable
+  `REQUEST_TIMEOUT`, `NETWORK_ERROR`, `RATE_LIMITED` and `UPSTREAM_ERROR` errors;
+  queue retries remain bounded by the existing attempt/DLQ contract.
+- Scan status responses expose bounded error codes and retry metadata; OCR output
+  remains untrusted draft data requiring review and confirmation.
+- Focused local checks on 2026-09-13: Qwen provider ESLint PASS;
+  provider/recovery, queue, quota, scan-route and UI tests PASS. The complete
+  candidate `pnpm check` gate is green: 1,579 tests / 93 files PASS, lint,
+  typecheck, migration replay through `0023` and production build all PASS.
+- Live provider access is **NOT VERIFIED**. A read-only probe of the supplied
+  test credential against `https://api.b.ai/v1/models` returned HTTP 401
+  (`Invalid token`); the credential was not persisted or echoed in repository
+  files. No production readiness, hosted CI, live smoke or canary result is
+  claimed by this checkpoint.
+
 ## Verification commands
 
 - `pnpm lint`: PASS.
@@ -101,6 +160,18 @@ Verified against `https://frigo.tungjpstore.net` after the cutover:
   `react-router-dom` (patched upstream at 7.18.0; major upgrade not included in
   this cutover). Full dependency audit reports 21 findings, with the remainder
   confined to development/tooling paths (`wrangler`/`miniflare`/`jsdom`).
+- Read-only lineage checks: `git ls-remote --heads github-frigo main` returned
+  `db2377fd9f63d1be38ce3882c6d8173e0bf9e497`; `git rev-list --left-right --count
+  HEAD...github-frigo/main` returned `0 2`; no remote fetch or mutation was run.
+- `git diff --check`: PASS for this documentation checkpoint.
+- OCR candidate local lint/typecheck/test/build/migration checks: **PASS** on
+  2026-09-13. Hosted PR #17 CI run `34728606704` also passed (1,579 tests / 93
+  files). Authorized live non-PII Qwen smoke, migration `0023` production apply,
+  readiness and canary evidence remain **PENDING**; do not infer production
+  readiness from CI alone.
+- Wrangler OAuth is currently unauthenticated on the local machine. `wrangler
+  login` opened the Cloudflare authorization URL, but the desktop browser bridge
+  was unavailable; no deployment or remote migration was attempted.
 
 ## PR #8 metadata
 
@@ -129,16 +200,17 @@ No real payment performed.
 
 ## Next task
 
-Next task: MONITORING / OPTIONAL GITHUB PRODUCTION ENVIRONMENT SETUP
+Next task: COMPLETE OCR PRODUCTION-RECOVERY VALIDATION BEFORE DEPLOYMENT
 
-The schema/code cutover is complete and verified. Keep planner flags at their
-safe defaults, do not touch PayOS/payment, and do not use a down-migration.
-Monitor the Worker and queue for the normal post-deploy window. For future
-releases, configure the GitHub `production` environment, `PRODUCTION_URL`, and
-Cloudflare secrets so the guarded workflow can produce its own receipt; the
-current deployment receipt is the direct Wrangler deployment above. Rollback is
-code-only to a schema-compatible SHA, with D1 restore/export reserved for an
-incident.
+Keep the deployed Worker and planner flags at their safe defaults while the OCR
+candidate is validated. Run the focused provider/queue/UI tests, all required
+local gates and an authorized live-provider smoke against the exact candidate SHA;
+then obtain hosted CI, readiness and canary evidence before any production deploy.
+No remote migration or production secret change has been performed for this
+candidate. Migration `0023_scan_request_fingerprint.sql` is required before a
+guarded deploy; do not touch PayOS/payment or use a down-migration. Until a new
+readiness receipt exists, the production receipt remains the direct Wrangler
+deployment above; rollback is code-only to a schema-compatible SHA.
 
 The deployed receipt is anchored to main SHA
 `d1b06732f8a80db4e77986df31ff28d9f04641fa`; the pre-cleanup main head is

@@ -62,6 +62,7 @@ VALUES ('migration_smoke_req_only', 'migration_smoke_plan', 'GINGER', 'Gừng', 
 .read migrations/0020_t01_foundation_hardening.sql
 .read migrations/0021_recipe_personalization.sql
 .read migrations/0022_generated_meal_plans.sql
+.read migrations/0023_scan_request_fingerprint.sql
 
 CREATE TEMP TABLE assert_zero (value INTEGER NOT NULL CHECK (value = 0));
 INSERT INTO assert_zero SELECT COUNT(*) FROM pragma_foreign_key_check;
@@ -95,6 +96,10 @@ INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('auth_otps') WHERE
 INSERT INTO assert_zero SELECT COUNT(*) FROM pragma_table_info('auth_otps') WHERE name = 'code';
 INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('scan_quota_ledger') WHERE name = 'idempotency_key';
 INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('scan_quota_periods') WHERE name = 'used_count';
+INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('scans') WHERE name = 'request_fingerprint';
+INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('scans') WHERE name = 'image_mime_type';
+INSERT INTO assert_one SELECT COUNT(*) FROM sqlite_master
+  WHERE type = 'index' AND name = 'idx_scans_request_fingerprint';
 INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('meal_plan_days_v2') WHERE name = 'snapshot_json';
 INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('meal_plan_slots_v2') WHERE name = 'leftover_source_id';
 INSERT INTO assert_one SELECT COUNT(*) FROM pragma_table_info('meal_plan_shopping_items_v2') WHERE name = 'required_quantity';

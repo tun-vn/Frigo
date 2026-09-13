@@ -1,6 +1,7 @@
 import { Env } from '../types';
 import { getRetentionConfig } from '../config/retention';
 import { validateEnvironment } from '../config/validation';
+import { reconcileStaleScanReservations } from './scan-quota';
 
 /**
  * Scheduled cleanup for expired OTPs, expired sessions, and terminal scan
@@ -91,6 +92,14 @@ export async function cleanupTerminalScanJobs(
   return { readyDeleted, failedDeleted };
 }
 
+/** Release quota held by an async enqueue that never reached a live worker. */
+export async function cleanupStaleScanReservations(
+  db: NonNullable<Env['DB']>,
+  staleMinutes: number,
+): Promise<{ consumed: number; released: number; expiredJobs: number; expiredScans: number }> {
+  return reconcileStaleScanReservations(db, staleMinutes);
+}
+
 function sanitizeError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   return message.slice(0, MAX_ERROR_LENGTH);
@@ -141,6 +150,17 @@ export async function runScheduledCleanup(env: Env): Promise<CleanupReport> {
     tasks.push({ task: 'expired-sessions', status: 'ok', deleted });
   } catch (err) {
     tasks.push({ task: 'expired-sessions', status: 'error', deleted: 0, error: sanitizeError(err) });
+  }
+
+  try {
+    const result = await cleanupStaleScanReservations(db, retention.reservedScanMinutes);
+    tasks.push({
+      task: 'stale-scan-reservations',
+      status: 'ok',
+      deleted: result.released,
+    });
+  } catch (err) {
+    tasks.push({ task: 'stale-scan-reservations', status: 'error', deleted: 0, error: sanitizeError(err) });
   }
 
   try {

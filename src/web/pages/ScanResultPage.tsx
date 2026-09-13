@@ -6,10 +6,33 @@ import { TopBar } from '../components/common/TopBar';
 import { QuantityStepper } from '../components/common/QuantityStepper';
 import { Button } from '../components/common/Button';
 import { getIngredientImage } from '../lib/ingredient-images';
-import { Plus, Trash2, CheckCircle2, X } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { StandardUnit } from '@frigo/domain';
 import { capturePrivateSession } from '../lib/private-session';
 import { invalidateInventoryDependents } from '../lib/query-invalidation';
+
+function scanErrorText(code?: string, _detail?: string): string {
+  if (code === 'AI_SCAN_NO_USABLE_ITEMS') {
+    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
+  }
+  if (code === 'AI_SCAN_TIMEOUT' || code === 'REQUEST_TIMEOUT') {
+    return 'Dịch vụ nhận diện phản hồi quá lâu. Hãy thử lại với ảnh nhỏ và rõ hơn.';
+  }
+  if (code === 'AI_SCAN_UNAVAILABLE' || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
+    code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED') {
+    return 'Dịch vụ nhận diện đang tạm thời không khả dụng. Hãy thử lại hoặc nhập thủ công.';
+  }
+  if (code === 'NETWORK_ERROR' || code === 'RATE_LIMITED' || code === 'UPSTREAM_ERROR') {
+    return 'Dịch vụ nhận diện đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
+  }
+  if (code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') {
+    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
+  }
+  if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') {
+    return 'Ảnh quét không còn khả dụng. Hãy chọn và tải lên ảnh mới.';
+  }
+  return 'Không thể xử lý bản quét. Hãy thử lại với ảnh rõ hơn.';
+}
 
 export const ScanResultPage: React.FC = () => {
   const navigate = useNavigate();
@@ -23,6 +46,8 @@ export const ScanResultPage: React.FC = () => {
   const [addName, setAddName] = useState('');
   const [addQty, setAddQty] = useState(1);
   const [addUnit, setAddUnit] = useState<StandardUnit>('piece');
+  const [pollError, setPollError] = useState<string | null>(null);
+  const [pollRefresh, setPollRefresh] = useState(0);
   const [scanStatus, setScanStatus] = useState<'pending' | 'ready' | 'failed'>(
     items.length > 0 || effectiveScanId.startsWith('scan_offline_') ? 'ready' : 'pending'
   );
@@ -33,10 +58,12 @@ export const ScanResultPage: React.FC = () => {
     if (items.length > 0 || !effectiveScanId || effectiveScanId.startsWith('scan_offline_')) return;
     let cancelled = false;
     let attempts = 0;
+    let timer: number | undefined;
     const poll = async () => {
       try {
         const scan = await api.getScan(effectiveScanId);
         if (cancelled) return;
+        setPollError(null);
         if (scan.status === 'ready' || scan.status === 'confirmed') {
           setScanStatus('ready');
           useScanStore.getState().setScanResults(effectiveScanId, scan.items || []);
@@ -44,19 +71,25 @@ export const ScanResultPage: React.FC = () => {
         }
         if (scan.status === 'failed') {
           setScanStatus('failed');
+          setPollError(scanErrorText(scan.errorCode, scan.errorMessage));
           return;
         }
       } catch {
-        // Keep the review screen available; the next poll may succeed.
+        setPollError('Không thể cập nhật trạng thái bản quét. Kiểm tra kết nối rồi thử lại.');
       }
-      if (!cancelled && attempts++ < 30) window.setTimeout(poll, 2000);
+      attempts += 1;
+      if (!cancelled && attempts < 45) {
+        timer = window.setTimeout(poll, 2000);
+      } else if (!cancelled) {
+        setPollError('Bản quét đang xử lý lâu hơn dự kiến. Bạn có thể kiểm tra lại hoặc chọn ảnh mới.');
+      }
     };
-    const timer = window.setTimeout(poll, 500);
+    timer = window.setTimeout(poll, 500);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [effectiveScanId, items.length]);
+  }, [effectiveScanId, items.length, pollRefresh]);
 
   const handleUpdateQty = (id: string, delta: number) => {
     const item = items.find((i) => i.id === id);
@@ -103,8 +136,12 @@ export const ScanResultPage: React.FC = () => {
       <div className="px-4 pt-3 space-y-4">
         {confirmError && <p role="alert" className="text-sm text-red-700">{confirmError}</p>}
         {/* Banner Alert */}
-        <div className="bg-emerald-50/80 border border-emerald-200/70 rounded-xl p-3.5 flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+        <div className={scanStatus === 'failed'
+          ? 'bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-start gap-3'
+          : 'bg-emerald-50/80 border border-emerald-200/70 rounded-xl p-3.5 flex items-start gap-3'}>
+          {scanStatus === 'failed'
+            ? <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            : <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />}
           <div className="text-xs">
             <p className="font-heading font-bold text-sm text-slate-900">
               {items.length > 0
@@ -122,6 +159,23 @@ export const ScanResultPage: React.FC = () => {
             </p>
           </div>
         </div>
+        {pollError && (
+          <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 flex items-center justify-between gap-3">
+            <span>{pollError}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {scanStatus === 'pending' && (
+                <button className="underline font-semibold" onClick={() => { setPollError(null); setPollRefresh((value) => value + 1); }}>
+                  Kiểm tra lại
+                </button>
+              )}
+              {scanStatus === 'failed' && (
+                <button className="underline font-semibold" onClick={() => { reset(); navigate('/scan'); }}>
+                  Quét ảnh mới
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Detected Items List */}
         <div className="space-y-2.5">

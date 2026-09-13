@@ -1,6 +1,7 @@
 import { AIRouter } from '@frigo/ai';
-import { findCanonicalIngredient, StandardUnit } from '@frigo/domain';
+import { findCanonicalIngredient, findCanonicalIngredientById, StandardUnit } from '@frigo/domain';
 import { Env } from '../types';
+import { sha256Hex } from '../utils/session';
 
 export type ScanQueueMessage = {
   type: 'scan.process.v1';
@@ -13,9 +14,14 @@ export type ScanQueueMessage = {
   imageKey?: string;
   mimeType?: string;
   idempotencyKey?: string;
+  requestFingerprint?: string;
 };
 
 export type QueueDecision = 'ack' | 'retry';
+
+// Keep a hung native/provider call from holding a queue lease indefinitely.
+// Provider-specific calls have their own shorter timeout where supported.
+export const SCAN_AI_TIMEOUT_MS = 25_000;
 
 export class ScanQueueError extends Error {
   constructor(
@@ -26,6 +32,173 @@ export class ScanQueueError extends Error {
     super(message);
     this.name = 'ScanQueueError';
   }
+}
+
+/** Persist the queue intent before sending so an ambiguous producer response
+ * can be retried by the scheduled reconciler without charging another scan. */
+export async function ensureScanQueueIntent(env: Env, message: ScanQueueMessage): Promise<void> {
+  const jobId = message.jobId || `scan_job_${message.scanId}`;
+  const idempotencyKey = message.idempotencyKey || jobId;
+  const inserted = await env.DB.prepare(
+    `INSERT OR IGNORE INTO scan_queue_jobs
+      (id, scan_id, household_id, user_id, idempotency_key, status)
+     SELECT ?, ?, ?, ?, ?, 'pending' WHERE EXISTS (
+       SELECT 1 FROM scans WHERE id = ? AND user_id = ? AND household_id = ?
+         AND status IN ('pending', 'processing'))`,
+  ).bind(
+    jobId,
+    message.scanId,
+    message.householdId,
+    message.userId,
+    idempotencyKey,
+    message.scanId,
+    message.userId,
+    message.householdId,
+  ).run();
+  if (!inserted.success) throw new ScanQueueError('Queue intent could not be persisted', 'DATABASE_ERROR', true);
+
+  // A client retry is evidence that the producer is still active. Re-arm only
+  // a synthetic reservation-expiry tombstone; permanent provider failures and
+  // active processing leases must remain untouched.
+  const rearmed = await env.DB.prepare(
+    `UPDATE scan_queue_jobs SET status = 'pending', attempts = 0,
+        claim_token = NULL, claim_attempt = 0, locked_at = NULL,
+        error_code = NULL, error_message = NULL, completed_at = NULL,
+        updated_at = datetime('now')
+       WHERE id = ? AND scan_id = ? AND user_id = ? AND household_id = ?
+         AND status = 'failed' AND error_code = 'RESERVATION_EXPIRED'`,
+  ).bind(jobId, message.scanId, message.userId, message.householdId).run();
+  if (!rearmed.success) throw new ScanQueueError('Queue intent could not be re-armed', 'DATABASE_ERROR', true);
+
+  // Refresh only a pending intent; never disturb a worker's processing lease.
+  const refreshed = await env.DB.prepare(
+    `UPDATE scan_queue_jobs SET updated_at = datetime('now')
+       WHERE id = ? AND scan_id = ? AND user_id = ? AND household_id = ? AND status = 'pending'`,
+  ).bind(jobId, message.scanId, message.userId, message.householdId).run();
+  if (!refreshed.success) throw new ScanQueueError('Queue intent could not be refreshed', 'DATABASE_ERROR', true);
+
+  const row = await env.DB.prepare(
+    `SELECT id, scan_id, user_id, household_id, idempotency_key
+       FROM scan_queue_jobs WHERE id = ? OR idempotency_key = ? LIMIT 1`,
+  ).bind(jobId, idempotencyKey).first<{
+    id: string;
+    scan_id: string;
+    user_id: string;
+    household_id: string;
+    idempotency_key: string;
+  }>();
+  if (!row || row.id !== jobId || row.scan_id !== message.scanId || row.user_id !== message.userId ||
+      row.household_id !== message.householdId || row.idempotency_key !== idempotencyKey) {
+    throw new ScanQueueError('Queue intent is bound to another scan tenant', 'IDEMPOTENCY_CONFLICT', false);
+  }
+}
+
+type ProviderFailureShape = {
+  code: string;
+  retryable: boolean;
+};
+
+export type ScanFailureClassification = {
+  code: string;
+  retryable: boolean;
+};
+
+/** Keep provider/database details out of durable queue records and logs. */
+export function sanitizedScanErrorMessage(code: string): string {
+  switch (code) {
+    case 'AI_SCAN_NO_USABLE_ITEMS':
+    case 'INVALID_RESPONSE':
+    case 'SCHEMA_VALIDATION':
+      return 'Không nhận diện được dữ liệu đủ rõ từ ảnh.';
+    case 'REQUEST_TIMEOUT':
+    case 'AI_SCAN_TIMEOUT':
+      return 'Dịch vụ nhận diện phản hồi quá lâu.';
+    case 'MODEL_NOT_FOUND':
+    case 'AUTHENTICATION_FAILED':
+    case 'PERMISSION_DENIED':
+    case 'LICENSE_REQUIRED':
+    case 'AI_SCAN_UNAVAILABLE':
+      return 'Dịch vụ nhận diện đang tạm thời không khả dụng.';
+    case 'NETWORK_ERROR':
+    case 'RATE_LIMITED':
+    case 'UPSTREAM_ERROR':
+      return 'Dịch vụ nhận diện đang bận hoặc mất kết nối.';
+    case 'IMAGE_NOT_FOUND':
+    case 'IMAGE_UNAVAILABLE':
+      return 'Ảnh bản quét không còn khả dụng.';
+    case 'MAX_ATTEMPTS_EXCEEDED':
+      return 'Bản quét đã hết số lần xử lý tự động.';
+    case 'RESERVATION_EXPIRED':
+      return 'Bản quét đã hết thời gian chờ xử lý.';
+    case 'CLAIM_LOST':
+    case 'CLAIM_FAILED':
+    case 'DATABASE_ERROR':
+      return 'Không thể lưu trạng thái bản quét.';
+    default:
+      return 'Không thể xử lý bản quét.';
+  }
+}
+
+function isProviderFailureShape(error: unknown): error is ProviderFailureShape {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as Partial<ProviderFailureShape>;
+  return typeof value.code === 'string' && typeof value.retryable === 'boolean';
+}
+
+async function runScanAI<T>(operation: Promise<T>, timeoutMs = SCAN_AI_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new ScanQueueError(`AI scan timed out after ${timeoutMs}ms`, 'REQUEST_TIMEOUT', true));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * Convert external AI failures into a bounded queue policy. Model access,
+ * authentication, license, schema and malformed-output failures cannot be
+ * repaired by replaying the same image; only transport/rate-limit/upstream
+ * failures should consume another queue attempt.
+ */
+export function classifyScanError(error: unknown): ScanFailureClassification {
+  if (error instanceof ScanQueueError) {
+    return { code: error.code, retryable: error.retryable };
+  }
+  if (isProviderFailureShape(error)) {
+    return { code: error.code, retryable: error.retryable };
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  if (/(model[_ -]?not[_ -]?found|model[\s\S]{0,120}(?:not found|does not exist)|no access)/i.test(normalized)) {
+    return { code: 'MODEL_NOT_FOUND', retryable: false };
+  }
+  if (/(license|5016|must be accepted|prompt\s*[=:]\s*["']?agree)/i.test(normalized)) {
+    return { code: 'LICENSE_REQUIRED', retryable: false };
+  }
+  if (/(authentication|unauthorized|\b401\b)/i.test(normalized)) {
+    return { code: 'AUTHENTICATION_FAILED', retryable: false };
+  }
+  if (/(forbidden|permission denied|\b403\b)/i.test(normalized)) {
+    return { code: 'PERMISSION_DENIED', retryable: false };
+  }
+  if (/(schema|non[- ]?json|invalid response|no detectable|no receipt items|no usable items|\b404\b|\b422\b)/i.test(normalized)) {
+    return { code: 'INVALID_RESPONSE', retryable: false };
+  }
+  if (/(timeout|timed out|abort|network|fetch failed|connection reset|econn|\b408\b|\b425\b|\b429\b|\b5\d\d\b)/i.test(normalized)) {
+    return { code: /\b429\b/.test(normalized) ? 'RATE_LIMITED' : 'UPSTREAM_ERROR', retryable: true };
+  }
+  // Preserve retry for unknown infrastructure failures (for example a D1
+  // trigger/connection error). Provider output failures should arrive as a
+  // typed error from @frigo/ai and are handled by the branches above.
+  return { code: 'AI_SCAN_FAILED', retryable: true };
 }
 
 function parseMessage(body: unknown): ScanQueueMessage {
@@ -53,19 +226,51 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function canonicalImageBase64(value: string): string {
+  const match = value.match(/^data:image\/[A-Za-z0-9.+-]+;base64,([\s\S]*)$/i);
+  return (match?.[1] || value).replace(/\s+/g, '');
+}
+
+async function verifyScanRequestIdentity(
+  env: Env,
+  message: ScanQueueMessage,
+  image: { data: string; mimeType: string },
+): Promise<void> {
+  const row = await env.DB.prepare(
+    `SELECT request_fingerprint, image_mime_type FROM scans WHERE id = ? AND user_id = ? AND household_id = ?`,
+  ).bind(message.scanId, message.userId, message.householdId).first<{ request_fingerprint: string | null; image_mime_type: string | null }>();
+  if (!row?.request_fingerprint) return;
+  if (message.requestFingerprint && message.requestFingerprint !== row.request_fingerprint) {
+    throw new ScanQueueError('Queue image fingerprint does not match scan', 'IDEMPOTENCY_CONFLICT', false);
+  }
+  const mimeType = (row.image_mime_type || image.mimeType || 'image/jpeg').toLowerCase();
+  const actual = await sha256Hex(`${message.scanType || 'fridge'}\n${mimeType}\n${canonicalImageBase64(image.data)}`);
+  if (actual !== row.request_fingerprint) {
+    throw new ScanQueueError('Scan image does not match persisted request', 'IDEMPOTENCY_CONFLICT', false);
+  }
+}
+
 function getRouter(env: Env): AIRouter {
+  const cloudflareVisionFallback = env.CLOUDFLARE_VISION_FALLBACK === undefined
+    ? undefined
+    : env.CLOUDFLARE_VISION_FALLBACK === 'true';
   return new AIRouter({
     aiMockMode: env.AI_MOCK_MODE === 'true',
     aiBinding: env.AI,
     qwenApiKey: env.QWEN_API_KEY,
     qwenBaseUrl: env.QWEN_BASE_URL,
+    qwenModel: env.QWEN_MODEL,
     groqApiKey: env.GROQ_API_KEY,
     groqBaseUrl: env.GROQ_BASE_URL,
     groqVisionModel: env.GROQ_VISION_MODEL,
+    groqFallbackEnabled: env.GROQ_FALLBACK_ENABLED === 'true',
+    cloudflareVisionFallback,
     zaiApiKey: env.ZAI_API_KEY,
     zaiBaseUrl: env.ZAI_BASE_URL,
+    glmFallbackEnabled: env.GLM_FALLBACK_ENABLED === 'true',
     deepseekApiKey: env.DEEPSEEK_API_KEY,
     deepseekBaseUrl: env.DEEPSEEK_BASE_URL,
+    deepseekFallbackEnabled: env.DEEPSEEK_FALLBACK_ENABLED === 'true',
     silentFallback: true,
   });
 }
@@ -82,7 +287,9 @@ async function loadImage(env: Env, message: ScanQueueMessage): Promise<{ data: s
   if (!object) throw new ScanQueueError('Scan image was not found', 'IMAGE_NOT_FOUND', false);
   return {
     data: toBase64(new Uint8Array(await object.arrayBuffer())),
-    mimeType: message.mimeType || object.httpMetadata?.contentType || 'image/jpeg',
+    // R2 metadata is written with the original upload and is authoritative;
+    // a stale/replayed queue message must not reinterpret the bytes.
+    mimeType: object.httpMetadata?.contentType || message.mimeType || 'image/jpeg',
   };
 }
 
@@ -215,14 +422,15 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
   const { jobId, claimToken } = claim;
   try {
     const image = await loadImage(env, message);
+    await verifyScanRequestIdentity(env, message, image);
     const router = getRouter(env);
     const scanType = message.scanType || 'fridge';
     const fence = commitFence(env, message, jobId, claimToken);
     if (scanType === 'receipt') {
-      const receipt = await router.receiptScan({ imageBase64OrUrl: image.data, mimeType: image.mimeType });
+      const receipt = await runScanAI(router.receiptScan({ imageBase64OrUrl: image.data, mimeType: image.mimeType }));
       const statements = receipt.items.map((item, index) => {
         const canonical = findCanonicalIngredient(item.raw_name);
-        const providerCanonical = item.canonical_id ? findCanonicalIngredient(item.canonical_id) : null;
+        const providerCanonical = item.canonical_id ? findCanonicalIngredientById(item.canonical_id) : null;
         return env.DB.prepare(
           `INSERT INTO scan_items
             (id, scan_id, raw_name, canonical_id, estimated_quantity, unit, confidence, category, storage,
@@ -260,28 +468,31 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
       const commitResults = await env.DB.batch(commitStatements);
       assertFencedCommit(commitResults);
     } else {
-      const result = await router.vision({
+      const result = await runScanAI(router.vision({
         imageBase64OrUrl: image.data,
         mimeType: image.mimeType,
-      });
+      }));
       const statements = result.items.map((item, index) => {
-      const canonical = findCanonicalIngredient(item.raw_name);
-      return env.DB.prepare(
+        const canonical = findCanonicalIngredient(item.raw_name);
+        const providerCanonical = item.canonical_id
+          ? findCanonicalIngredientById(item.canonical_id)
+          : null;
+        return env.DB.prepare(
         `INSERT INTO scan_items
           (id, scan_id, raw_name, canonical_id, estimated_quantity, unit, confidence, category, storage)
          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${fence.guard}`,
-      ).bind(
-        `scan_item_${message.scanId}_${index}`,
-        message.scanId,
-        item.raw_name,
-        canonical?.id || item.canonical_id || null,
-        item.estimated_quantity,
-        item.unit as StandardUnit,
-        item.confidence,
-        canonical?.category || item.category || 'other',
-        item.storage || 'fridge',
-        ...fence.bindings,
-      );
+        ).bind(
+          `scan_item_${message.scanId}_${index}`,
+          message.scanId,
+          item.raw_name,
+          canonical?.id || providerCanonical?.id || null,
+          item.estimated_quantity,
+          item.unit as StandardUnit,
+          item.confidence,
+          canonical?.category || providerCanonical?.category || item.category || 'other',
+          item.storage || 'fridge',
+          ...fence.bindings,
+        );
       });
       const commitStatements = [
         fence.acquire,
@@ -298,8 +509,9 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
       assertFencedCommit(commitResults);
     }
   } catch (error) {
-    const code = error instanceof ScanQueueError ? error.code : 'AI_SCAN_FAILED';
-    const requestedRetry = error instanceof ScanQueueError ? error.retryable : true;
+    const classification = classifyScanError(error);
+    const code = classification.code;
+    const requestedRetry = classification.retryable;
     const attemptsRow = await env.DB.prepare(
       `SELECT attempts, max_attempts FROM scan_queue_jobs WHERE id = ? AND status = 'processing' AND claim_token = ?`,
     ).bind(jobId, claimToken).first<{ attempts: number; max_attempts: number }>();
@@ -314,11 +526,11 @@ export async function processScanJob(env: Env, messageBody: unknown): Promise<vo
       env.DB.prepare(`UPDATE scan_queue_jobs SET status = ?, error_code = ?, error_message = ?,
         completed_at = CASE WHEN ? = 'failed' THEN datetime('now') ELSE NULL END, updated_at = datetime('now')
         WHERE id = ? AND status = 'processing' AND claim_token = ?`)
-        .bind(retryable ? 'pending' : 'failed', code, error instanceof Error ? error.message.slice(0, 500) : String(error),
+        .bind(retryable ? 'pending' : 'failed', code, sanitizedScanErrorMessage(code),
           retryable ? 'pending' : 'failed', ...fence.bindings),
     ]);
     assertFencedCommit(failureResults);
-    throw new ScanQueueError(error instanceof Error ? error.message : String(error), code, retryable);
+    throw new ScanQueueError(sanitizedScanErrorMessage(code), code, retryable);
   }
 }
 

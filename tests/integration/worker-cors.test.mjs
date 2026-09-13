@@ -23,6 +23,7 @@ it('allows both request-owner headers through the Worker CORS preflight', async 
 const production = {
   ENVIRONMENT: 'production', APP_URL: 'https://app.example.com/frigo',
   DB: {}, CACHE: {}, AI: {}, SCAN_QUEUE: {},
+  QWEN_API_KEY: 'qwen-test-key',
   JWT_SECRET: 'test-only-jwt-secret'.repeat(3), OTP_HASH_SECRET: 'test-only-otp-secret',
   TURNSTILE_SITE_KEY: 'test-site', TURNSTILE_SECRET_KEY: 'test-secret',
 };

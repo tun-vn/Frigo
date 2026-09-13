@@ -1,5 +1,51 @@
 # Architecture Decisions
 
+## ADR-020 — Recoverable OCR provider selection and quality-gated queue failures
+
+**Status:** Accepted 2026-09-12 for the OCR production-recovery candidate; this
+record is not a production deployment receipt.
+
+**Context:** The deployed application lineage is anchored to `d1b06732`, while
+the current recovery worktree must handle provider model retirement, malformed or
+placeholder vision output, and queue retries that cannot repair a permanent
+configuration or data-quality failure. OCR remains an untrusted draft source and
+must not become an authority for inventory quantities, prices or safety claims.
+
+**Decision:** The recovery candidate keeps `AIRouter` as the single provider
+boundary and makes Qwen `qwen3.7-flash` the first provider for vision, receipt
+OCR, chat and ranking through the DashScope international OpenAI-compatible
+endpoint (`QWEN_BASE_URL`, `QWEN_MODEL`). Structured requests disable thinking
+to bound OCR latency. Groq remains a legacy compatible fallback only when
+`GROQ_FALLBACK_ENABLED=true`; native Cloudflare vision is added only when
+`CLOUDFLARE_VISION_FALLBACK=true`. DeepSeek remains the optional text/ranking
+fallback only when `DEEPSEEK_FALLBACK_ENABLED=true`, and Z.ai/GLM the optional
+vision/text extension path only when `GLM_FALLBACK_ENABLED=true`. The deployed
+SHA is not changed by this record. Production mock fallback remains disabled.
+
+Every fridge or receipt result is parsed through the existing Zod contracts and a
+quality gate that removes generic/placeholder labels and confidence below `0.6`;
+an empty usable set returns `AI_SCAN_NO_USABLE_ITEMS`. Providers expose typed
+errors with retry intent. `MODEL_NOT_FOUND`, `AUTHENTICATION_FAILED`,
+`PERMISSION_DENIED`, `LICENSE_REQUIRED`, `SCHEMA_VALIDATION`, `INVALID_RESPONSE`
+and `AI_SCAN_NO_USABLE_ITEMS` are permanent. `REQUEST_TIMEOUT`, `NETWORK_ERROR`,
+`RATE_LIMITED` and `UPSTREAM_ERROR` may retry within the existing queue attempt
+limit and dead-letter flow. Public scan responses expose bounded, actionable
+failure codes without provider credentials or raw image data.
+
+**Consequences:** This is a code/config recovery with one additive D1 migration
+(`0023_scan_request_fingerprint.sql`) and no data backfill, inventory/auth/Week/
+PayOS change or automatic production deployment. The migration must be applied
+and schema-gated before deploying code that reads the new scan identity columns.
+The existing queue lease, idempotency, tenant fencing and rollback rules remain
+authoritative. Candidate model access, provider licensing, exact-SHA CI, canary
+health and readiness must be verified before release. OCR output still requires
+human review/confirmation and does not create trusted retail offers.
+
+**Alternatives considered:** Retrying every provider error, silently falling back
+to mock fixtures in production, or treating any syntactically valid OCR line as
+usable. Rejected because retries cannot fix permanent provider/configuration
+failures and fabricated or low-quality rows could enter a household draft.
+
 ## ADR-019 — T07 planner-wide best-effort account compute budget
 
 **Status:** Accepted 2026-09-09 after authenticated fan-out reproduction.

@@ -18,10 +18,14 @@ required_migrations(name) AS (
     ('0015_auth_session_otp_hardening.sql'),
     ('0016_scan_quota_ledger.sql'),
     ('0017_auth_otps_remove_plaintext.sql'),
+    -- Payment migration remains immutable/protected, but it is part of the
+    -- production ledger and must be present for an exact schema check.
+    ('0018_payments.sql'),
     ('0019_recipe_domain_foundation.sql'),
     ('0020_t01_foundation_hardening.sql'),
     ('0021_recipe_personalization.sql'),
-    ('0022_generated_meal_plans.sql')
+    ('0022_generated_meal_plans.sql'),
+    ('0023_scan_request_fingerprint.sql')
 ),
 required_tables(name) AS (
   VALUES
@@ -111,6 +115,8 @@ required_columns(table_name, column_name) AS (
     ,('scans', 'total_amount_vnd')
     ,('scan_items', 'unit_price_vnd')
     ,('scan_items', 'total_price_vnd')
+    ,('scans', 'request_fingerprint')
+    ,('scans', 'image_mime_type')
 ),
 required_triggers(name) AS (
   VALUES

@@ -1,5 +1,9 @@
 # Frigo Release Candidate / GitHub Release Finalized
 
+> Historical release receipt. The separate `codex/ocr-production-recovery`
+> worktree is an unreleased candidate and is not included in the deployment
+> facts below.
+
 ## Engineering
 
 - T01-T07: COMPLETE.
@@ -63,6 +67,27 @@ major-version upgrade.
 Checked-in planner/UI/AI safe defaults remain according to the existing rollout
 policy. No planner flags or production secrets were changed.
 Planner rollout: NOT STARTED.
+
+### OCR recovery candidate (unreleased)
+
+The current worktree adds a Qwen-first provider configuration, but this
+historical release receipt does not claim it is deployed. Qwen `qwen3.7-flash`
+is the primary vision/receipt/chat/ranking model through the DashScope
+international endpoint. Groq is disabled unless `GROQ_FALLBACK_ENABLED=true`;
+Cloudflare Vision is opt-in through `CLOUDFLARE_VISION_FALLBACK`. DeepSeek
+remains the optional text/ranking fallback when
+`DEEPSEEK_FALLBACK_ENABLED=true`, and Z.ai/GLM the optional vision/text
+extension path when `GLM_FALLBACK_ENABLED=true`. GLM-5.3 Flash is
+future model work, not an active production setting. Full local candidate gates
+passed on 2026-09-13 (1,579 tests / 93 files, lint, typecheck, migration replay
+and build); hosted PR #17 CI run `34728606704` is green. Live non-PII smoke,
+readiness and canary evidence are still required before release.
+A read-only probe of the supplied test credential against `https://api.b.ai/v1/models`
+returned HTTP 401 (`Invalid token`); the credential was not persisted.
+
+The candidate adds `0023_scan_request_fingerprint.sql` for durable scan replay
+identity. Local candidate checks must cover migrations `0001`-`0023`; production
+D1 remains at `0022` until the migration is explicitly applied during release.
 
 ## Production
 
@@ -143,8 +168,12 @@ historical documentation branch.
 
 This correction is limited to:
 
+- `README.md`
+- `DEPLOYMENT.md`
+- `docs/SCAN_QUEUE.md`
 - `docs/ai/RELEASE_CANDIDATE.md`
 - `docs/ai/CURRENT_STATE.md`
+- `docs/ai/DECISIONS.md`
 - `docs/ai/TASK_BOARD.md`
 - `docs/ai/HANDOFF.md`
 
@@ -152,13 +181,15 @@ NO APPLICATION CHANGE. PayOS/payment code untouched. No real payment performed.
 
 ## Next task
 
-Next task: POST-DEPLOY MONITORING / FUTURE GUARDED WORKFLOW SETUP
+Next task: COMPLETE OCR RECOVERY VALIDATION BEFORE GUARDED DEPLOYMENT
 
-Monitor Worker and queue health through the normal post-deploy window. Keep
-planner flags at safe defaults and do not touch PayOS/payment. Configure the
-GitHub `production` environment, `PRODUCTION_URL`, and Cloudflare secrets before
-the next release so the guarded workflow can produce its own receipt. Rollback
-remains code-only to a schema-compatible SHA; do not use a down-migration.
+Keep the deployed Worker and planner flags at safe defaults while the OCR
+candidate is validated. Run focused provider/queue/UI tests and all required
+local gates, then obtain authorized live-provider smoke, hosted CI, readiness and
+canary evidence before any production deploy. Apply and verify additive migration
+`0023_scan_request_fingerprint.sql` first; no production secret change is implied.
+Do not touch PayOS/payment or use a down-migration. Configure the GitHub `production` environment,
+`PRODUCTION_URL` and Cloudflare secrets before the next guarded release.
 
 The deployed receipt is anchored to main SHA
 `d1b06732f8a80db4e77986df31ff28d9f04641fa`; the pre-cleanup main head remains

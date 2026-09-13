@@ -8,6 +8,25 @@ import { clsx } from 'clsx';
 import { capturePrivateSession } from '../lib/private-session';
 import { readPrivateImage } from '../lib/private-image';
 
+function scanFailureMessage(error: unknown, fallback: string): string {
+  const detail = error instanceof Error ? error.message.toUpperCase() : '';
+  if (detail.includes('AI_SCAN_NO_USABLE_ITEMS') || detail.includes('INVALID_RESPONSE') || detail.includes('SCHEMA_VALIDATION')) {
+    return 'Ảnh chưa đủ rõ để nhận diện món ăn. Hãy chụp gần hơn, đủ sáng và không bị lóa.';
+  }
+  if (detail.includes('AI_SCAN_TIMEOUT') || detail.includes('REQUEST_TIMEOUT')) {
+    return 'Dịch vụ nhận diện phản hồi quá lâu. Hãy thử lại với ảnh nhỏ và rõ hơn.';
+  }
+  if (detail.includes('AI_SCAN_UNAVAILABLE') || detail.includes('MODEL_NOT_FOUND') ||
+    detail.includes('AUTHENTICATION_FAILED') || detail.includes('PERMISSION_DENIED') ||
+    detail.includes('LICENSE_REQUIRED')) {
+    return 'Dịch vụ nhận diện đang tạm thời không khả dụng. Bạn có thể thử lại hoặc nhập thủ công.';
+  }
+  if (detail.includes('NETWORK_ERROR') || detail.includes('RATE_LIMITED') || detail.includes('UPSTREAM_ERROR')) {
+    return 'Dịch vụ nhận diện đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
+  }
+  return fallback;
+}
+
 export const ScanPage: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,14 +90,12 @@ export const ScanPage: React.FC = () => {
 
         const receiptRes = await api.scanReceipt(base64, commandId);
 
-        setTimeout(() => {
-          if (!isCurrent()) return;
-          setProcessing(false);
-          navigate(`/scan/receipt-review?scanId=${encodeURIComponent(receiptRes.id)}`);
-        }, 1600);
-      } catch {
         if (!isCurrent()) return;
-        setErrorMsg('Không thể bóc tách hóa đơn. Vui lòng thử lại với ảnh rõ nét hơn!');
+        setProcessing(false);
+        navigate(`/scan/receipt-review?scanId=${encodeURIComponent(receiptRes.id)}`);
+      } catch (error) {
+        if (!isCurrent()) return;
+        setErrorMsg(scanFailureMessage(error, 'Không thể bóc tách hóa đơn. Vui lòng thử lại với ảnh rõ nét hơn!'));
         setProcessing(false);
       } finally {
         inFlight.current = false;
@@ -93,14 +110,12 @@ export const ScanPage: React.FC = () => {
 
       const scanRes = await api.scanFridge(base64, activeTab, commandId);
 
-      setTimeout(() => {
-        if (!isCurrent()) return;
-        setScanResults(scanRes.id, scanRes.items);
-        navigate(`/scan/${scanRes.id}/review`);
-      }, 1600);
-    } catch {
       if (!isCurrent()) return;
-      setErrorMsg('Không thể xử lý ảnh hoặc nhận diện thất bại. Vui lòng thử lại!');
+      setScanResults(scanRes.id, scanRes.items);
+      navigate(`/scan/${scanRes.id}/review`);
+    } catch (error) {
+      if (!isCurrent()) return;
+      setErrorMsg(scanFailureMessage(error, 'Không thể xử lý ảnh hoặc nhận diện thất bại. Vui lòng thử lại!'));
       setProcessing(false);
     } finally {
       inFlight.current = false;

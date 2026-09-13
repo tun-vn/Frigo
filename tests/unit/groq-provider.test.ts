@@ -64,9 +64,11 @@ describe('GroqProvider', () => {
     const router = new AIRouter({
       aiMockMode: false,
       groqApiKey: 'secret',
+      groqFallbackEnabled: true,
       aiBinding: {
         run: async () => ({ response: JSON.stringify({ items: [{ raw_name: 'Trứng gà', estimated_quantity: 1, unit: 'piece', confidence: 0.9 }] }) }),
       },
+      cloudflareVisionFallback: true,
       silentFallback: true,
     });
     const result = await router.vision({ imageBase64OrUrl: 'AQI=' });
@@ -87,7 +89,7 @@ describe('GroqProvider', () => {
       choices: [{ message: { content: JSON.stringify({ items: [{ raw_name: 'Cà chua', estimated_quantity: 2, unit: 'piece', confidence: 0.9 }] }) } }],
     }), { status: 200 }));
     const usage: Array<{ provider: string; model: string; status: string }> = [];
-    const router = new AIRouter({ aiMockMode: false, groqApiKey: 'secret' }, (entry) => usage.push(entry));
+    const router = new AIRouter({ aiMockMode: false, groqApiKey: 'secret', groqFallbackEnabled: true }, (entry) => usage.push(entry));
     await router.vision({ imageBase64OrUrl: 'AQI=' });
     expect(usage[0]).toMatchObject({ provider: 'groq', model: GROQ_DEFAULT_VISION_MODEL, status: 'success' });
   });

@@ -113,6 +113,7 @@ describe('scheduled cleanup', () => {
     expect(report.tasks.map((task) => task.task)).toEqual([
       'expired-otps',
       'expired-sessions',
+      'stale-scan-reservations',
       'terminal-ready-jobs',
       'terminal-failed-jobs',
     ]);
@@ -160,6 +161,7 @@ describe('retention configuration', () => {
       sessionDays: DEFAULT_RETENTION_DAYS.sessions,
       readyJobDays: DEFAULT_RETENTION_DAYS.readyJobs,
       failedJobDays: DEFAULT_RETENTION_DAYS.failedJobs,
+      reservedScanMinutes: 60,
     });
   });
 
@@ -169,10 +171,12 @@ describe('retention configuration', () => {
       CLEANUP_SESSION_RETENTION_DAYS: 'not-a-number',
       CLEANUP_READY_JOB_RETENTION_DAYS: '-5',
       CLEANUP_FAILED_JOB_RETENTION_DAYS: '120',
+      CLEANUP_RESERVED_SCAN_RETENTION_MINUTES: '15',
     } as Env);
     expect(config.otpDays).toBe(14);
     expect(config.sessionDays).toBe(DEFAULT_RETENTION_DAYS.sessions);
     expect(config.readyJobDays).toBe(DEFAULT_RETENTION_DAYS.readyJobs);
     expect(config.failedJobDays).toBe(120);
+    expect(config.reservedScanMinutes).toBe(15);
   });
 });

@@ -9,7 +9,9 @@ echo "2. Running ESLint..."
 pnpm lint
 
 echo "3. Running Vitest Suite..."
-pnpm test
+# Node 22's optional experimental Web Storage global can shadow jsdom's
+# implementation in shell runners. Disable it for deterministic browser tests.
+NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--no-experimental-webstorage" pnpm test
 
 echo "4. Replaying Database Migrations..."
 pnpm check:migrations

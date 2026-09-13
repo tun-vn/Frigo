@@ -38,19 +38,29 @@ export interface Env {
   CLEANUP_SESSION_RETENTION_DAYS?: string;
   CLEANUP_READY_JOB_RETENTION_DAYS?: string;
   CLEANUP_FAILED_JOB_RETENTION_DAYS?: string;
+  CLEANUP_RESERVED_SCAN_RETENTION_MINUTES?: string;
 
   QWEN_API_KEY?: string;
   QWEN_BASE_URL?: string;
+  QWEN_MODEL?: string;
 
   GROQ_API_KEY?: string;
   GROQ_BASE_URL?: string;
   GROQ_VISION_MODEL?: string;
+  GROQ_FALLBACK_ENABLED?: string;
+  CLOUDFLARE_VISION_FALLBACK?: string;
 
   ZAI_API_KEY?: string;
   ZAI_BASE_URL?: string;
+  // Future GLM/Z.ai fallback is opt-in; a stored key alone must not alter the
+  // production provider order.
+  GLM_FALLBACK_ENABLED?: string;
 
   DEEPSEEK_API_KEY?: string;
   DEEPSEEK_BASE_URL?: string;
+  // DeepSeek is a text/ranking extension and is disabled unless explicitly
+  // enabled for the deployment.
+  DEEPSEEK_FALLBACK_ENABLED?: string;
 
   AI_GATEWAY_URL?: string;
   TURNSTILE_SITE_KEY?: string;

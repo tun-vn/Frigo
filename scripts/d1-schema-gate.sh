@@ -58,4 +58,4 @@ if ! printf '%s' "$result" | node --input-type=module -e '
   exit 1
 fi
 
-echo "D1 schema gate passed: required migrations (0001-0017 and 0019-0022), security/Week schema, recipe foundation, ranking persistence, generated plans, and foreign keys are valid."
+echo "D1 schema gate passed: required migrations (0001-0023, including protected 0018), security/Week schema, recipe foundation, ranking persistence, generated plans, scan replay identity, and foreign keys are valid."

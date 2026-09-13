@@ -21,6 +21,24 @@ function healthyDb(): Env['DB'] {
   } as unknown as Env['DB'];
 }
 
+function schemaMismatchDb(): Env['DB'] {
+  return {
+    prepare(sql: string) {
+      if (sql.includes('request_fingerprint')) throw new Error('missing migration 0023');
+      return {
+        bind() {
+          return this;
+        },
+        first: async () => ({ ok: 1 }),
+        run: async () => ({ success: true, meta: { changes: 0 } }),
+        all: async () => ({ results: [], success: true, meta: {} }),
+      };
+    },
+    batch: async () => [],
+    exec: async () => ({ count: 0, duration: 0 }),
+  } as unknown as Env['DB'];
+}
+
 const SECRETS_IN_ENV: Partial<Env> = {
   RESEND_API_KEY: 're_sk_do_not_leak_1234567890',
   TURNSTILE_SECRET_KEY: '0xturnstile_secret_do_not_leak',
@@ -39,11 +57,11 @@ function createApp() {
 }
 
 async function fetchReady(app: ReturnType<typeof createApp>, env: Partial<Env>): Promise<Response> {
-  return app.request('/api/v1/health/ready', { method: 'GET' }, env as Env);
+  return app.request('/api/v1/health/ready', { method: 'GET' }, { IMAGES: {} as Env['IMAGES'], ...env } as Env);
 }
 
 async function fetchHealth(app: ReturnType<typeof createApp>, env: Partial<Env>): Promise<Response> {
-  return app.request('/api/v1/health', { method: 'GET' }, env as Env);
+  return app.request('/api/v1/health', { method: 'GET' }, { IMAGES: {} as Env['IMAGES'], ...env } as Env);
 }
 
 describe('health endpoints', () => {
@@ -63,7 +81,8 @@ describe('health endpoints', () => {
       DB: healthyDb(),
       GIT_COMMIT: 'abc1234def5678',
       AI_MOCK_MODE: 'false',
-      AI: {},
+      AI: undefined,
+      QWEN_API_KEY: 'qwen-test-key',
       SCAN_QUEUE: {} as unknown as Env['SCAN_QUEUE'],
       SCAN_QUEUE_MODE: 'async',
       WEEK_SCHEMA_MODE: 'dual',
@@ -88,7 +107,8 @@ describe('health endpoints', () => {
       ENVIRONMENT: 'production',
       DB: healthyDb(),
       AI_MOCK_MODE: 'false',
-      AI: {},
+      AI: undefined,
+      QWEN_API_KEY: 'qwen-test-key',
       SCAN_QUEUE: {} as unknown as Env['SCAN_QUEUE'],
       SCAN_QUEUE_MODE: 'async',
       WEEK_SCHEMA_MODE: 'dual',
@@ -121,13 +141,27 @@ describe('health endpoints', () => {
     expect((body.services as Record<string, unknown>).database).toBe('error');
   });
 
+  it('readiness reports unhealthy when scan fingerprint migration is missing', async () => {
+    const app = createApp();
+    const response = await fetchReady(app, {
+      ENVIRONMENT: 'development',
+      DB: schemaMismatchDb(),
+    });
+    expect(response.status).toBe(503);
+    expect((await response.json()) as Record<string, unknown>).toMatchObject({
+      status: 'unhealthy',
+      services: { database: 'error' },
+    });
+  });
+
   it('readiness never leaks secret values', async () => {
     const app = createApp();
     const response = await fetchReady(app, {
       ENVIRONMENT: 'production',
       DB: healthyDb(),
       AI_MOCK_MODE: 'false',
-      AI: {},
+      AI: undefined,
+      QWEN_API_KEY: 'qwen-test-key',
       SCAN_QUEUE: {} as unknown as Env['SCAN_QUEUE'],
       SCAN_QUEUE_MODE: 'async',
       WEEK_SCHEMA_MODE: 'dual',
@@ -158,7 +192,8 @@ describe('health endpoints', () => {
     const response = await fetchHealth(app, {
       ENVIRONMENT: 'production',
       AI_MOCK_MODE: 'false',
-      AI: {},
+      AI: undefined,
+      QWEN_API_KEY: 'qwen-test-key',
       SCAN_QUEUE: {} as unknown as Env['SCAN_QUEUE'],
       SCAN_QUEUE_MODE: 'async',
       WEEK_SCHEMA_MODE: 'dual',
@@ -181,7 +216,8 @@ describe('health endpoints', () => {
   ] as const)('readiness fails closed for unusable auth configuration %j', async (overrides, code) => {
     const response = await fetchReady(createApp(), {
       ENVIRONMENT: 'production', APP_URL: 'https://frigo.example.com',
-      DB: healthyDb(), CACHE: {} as Env['CACHE'], AI: {},
+      DB: healthyDb(), CACHE: {} as Env['CACHE'], AI: undefined,
+      QWEN_API_KEY: 'qwen-test-key',
       SCAN_QUEUE: {} as Env['SCAN_QUEUE'], SCAN_QUEUE_MODE: 'async',
       WEEK_SCHEMA_MODE: 'dual', AI_MOCK_MODE: 'false',
       JWT_SECRET: 's'.repeat(40), OTP_HASH_SECRET: 'otp'.repeat(16),
@@ -189,5 +225,86 @@ describe('health endpoints', () => {
     });
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ code: 'CONFIG_INVALID', issues: expect.arrayContaining([code]) });
+  });
+
+  it('reports AI as disabled when only the native binding exists without an enabled fallback', async () => {
+    const response = await fetchReady(createApp(), {
+      ENVIRONMENT: 'development',
+      DB: healthyDb(),
+      AI: {},
+      AI_MOCK_MODE: 'false',
+      CLOUDFLARE_VISION_FALLBACK: 'false',
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { services: { ai: string } };
+    expect(body.services.ai).toBe('disabled');
+  });
+
+  it('reports Qwen as the configured production AI capability', async () => {
+    const response = await fetchReady(createApp(), {
+      ENVIRONMENT: 'production',
+      DB: healthyDb(),
+      CACHE: {} as Env['CACHE'],
+      AI_MOCK_MODE: 'false',
+      QWEN_API_KEY: 'qwen-test-key',
+      SCAN_QUEUE: {} as Env['SCAN_QUEUE'],
+      SCAN_QUEUE_MODE: 'async',
+      WEEK_SCHEMA_MODE: 'dual',
+      JWT_SECRET: 's'.repeat(40),
+      OTP_HASH_SECRET: 'otp'.repeat(16),
+      APP_URL: 'https://frigo.example.com',
+      TURNSTILE_SITE_KEY: 'test-site-key',
+      TURNSTILE_SECRET_KEY: 'test-secret-key',
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect((body.services as Record<string, unknown>).ai).toBe('configured');
+  });
+
+  it('fails production readiness when Qwen is missing even if a native AI binding exists', async () => {
+    const response = await fetchReady(createApp(), {
+      ENVIRONMENT: 'production',
+      DB: healthyDb(),
+      CACHE: {} as Env['CACHE'],
+      AI: {},
+      AI_MOCK_MODE: 'false',
+      SCAN_QUEUE: {} as Env['SCAN_QUEUE'],
+      SCAN_QUEUE_MODE: 'async',
+      WEEK_SCHEMA_MODE: 'dual',
+      JWT_SECRET: 's'.repeat(40),
+      OTP_HASH_SECRET: 'otp'.repeat(16),
+      APP_URL: 'https://frigo.example.com',
+      TURNSTILE_SITE_KEY: 'test-site-key',
+      TURNSTILE_SECRET_KEY: 'test-secret-key',
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'CONFIG_INVALID',
+      issues: expect.arrayContaining(['CONFIG_QWEN_API_KEY_MISSING']),
+    });
+  });
+
+  it('fails production readiness when async scan image storage is missing', async () => {
+    const response = await fetchReady(createApp(), {
+      ENVIRONMENT: 'production',
+      DB: healthyDb(),
+      CACHE: {} as Env['CACHE'],
+      AI_MOCK_MODE: 'false',
+      QWEN_API_KEY: 'qwen-test-key',
+      SCAN_QUEUE: {} as Env['SCAN_QUEUE'],
+      SCAN_QUEUE_MODE: 'async',
+      IMAGES: undefined,
+      WEEK_SCHEMA_MODE: 'dual',
+      JWT_SECRET: 's'.repeat(40),
+      OTP_HASH_SECRET: 'otp'.repeat(16),
+      APP_URL: 'https://frigo.example.com',
+      TURNSTILE_SITE_KEY: 'test-site-key',
+      TURNSTILE_SECRET_KEY: 'test-secret-key',
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'CONFIG_INVALID',
+      issues: expect.arrayContaining(['CONFIG_SCAN_IMAGE_STORAGE_MISSING']),
+    });
   });
 });

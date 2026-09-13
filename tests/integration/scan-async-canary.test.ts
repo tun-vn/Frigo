@@ -151,5 +151,13 @@ describe('Fridge scan async canary (in-memory D1)', () => {
         scan_type: 'fridge',
       },
     ]);
+    expect(db.query('SELECT id, scan_id, status, idempotency_key FROM scan_queue_jobs')).toEqual([
+      {
+        id: `scan_job_${payload.scan.id}`,
+        scan_id: payload.scan.id,
+        status: 'pending',
+        idempotency_key: `scan:${payload.scan.id}:v1`,
+      },
+    ]);
   });
 });

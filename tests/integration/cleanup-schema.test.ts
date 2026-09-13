@@ -39,7 +39,7 @@ describe('scheduled cleanup against migrated hardening schema', () => {
               datetime('now','${id === 'recent' ? '-1 day' : '-120 days'}'),datetime('now','-120 days'));`);
       }
       db.seed(`INSERT INTO scan_quota_ledger (id,user_id,household_id,scan_id,idempotency_key,period_start,status,created_at)
-        VALUES ('quota','u','h','reserved','key','2020-01-01','reserved',datetime('now','-120 days'));`);
+        VALUES ('quota','u','h','reserved','key','2020-01-01','reserved',datetime('now'));`);
       const env = { DB: db, ENVIRONMENT: 'test' } as Env;
       for (let run = 0; run < 2; run += 1) {
         expect((await runScheduledCleanup(env)).tasks.every((task) => task.status === 'ok' && task.deleted === 0)).toBe(true);
@@ -100,7 +100,8 @@ describe('scheduled cleanup against migrated hardening schema', () => {
       }
       for (const status of ['reserved', 'consumed', 'released']) {
         db.seed(`INSERT INTO scan_quota_ledger (id,user_id,household_id,scan_id,idempotency_key,period_start,status,created_at)
-          VALUES ('quota-${status}','cleanup-user','cleanup-house','quota-scan-${status}','quota-key-${status}','2020-01-01','${status}',datetime('now','-90 days'));`);
+          VALUES ('quota-${status}','cleanup-user','cleanup-house','quota-scan-${status}','quota-key-${status}','2020-01-01','${status}',
+            CASE WHEN '${status}' = 'reserved' THEN datetime('now') ELSE datetime('now','-90 days') END);`);
       }
       const env = { DB: db, ENVIRONMENT: 'test' } as Env;
       const report = await runScheduledCleanup(env);

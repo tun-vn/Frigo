@@ -6,10 +6,33 @@ import { Button } from '../components/common/Button';
 import { api } from '../services/api';
 import { useWeekStore } from '../stores/useWeekStore';
 import { getIngredientImage } from '../lib/ingredient-images';
-import { CheckCircle2, ShoppingBag, Trash2, Store, Calendar, CalendarCheck } from 'lucide-react';
+import { CheckCircle2, ShoppingBag, Trash2, Store, Calendar, CalendarCheck, AlertCircle } from 'lucide-react';
 import { StandardUnit } from '@frigo/domain';
 import { capturePrivateSession } from '../lib/private-session';
 import { invalidateInventoryDependents } from '../lib/query-invalidation';
+
+function receiptErrorText(code?: string, _detail?: string): string {
+  if (code === 'AI_SCAN_NO_USABLE_ITEMS') {
+    return 'Không đọc được dòng hàng đủ rõ. Hãy chụp toàn bộ hóa đơn, thẳng và đủ sáng.';
+  }
+  if (code === 'AI_SCAN_TIMEOUT' || code === 'REQUEST_TIMEOUT') {
+    return 'Dịch vụ đọc hóa đơn phản hồi quá lâu. Hãy thử lại với ảnh gọn và rõ hơn.';
+  }
+  if (code === 'AI_SCAN_UNAVAILABLE' || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
+    code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED') {
+    return 'Dịch vụ đọc hóa đơn đang tạm thời không khả dụng. Bạn có thể nhập thủ công.';
+  }
+  if (code === 'NETWORK_ERROR' || code === 'RATE_LIMITED' || code === 'UPSTREAM_ERROR') {
+    return 'Dịch vụ đọc hóa đơn đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
+  }
+  if (code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') {
+    return 'Không đọc được dòng hàng đủ rõ. Hãy chụp toàn bộ hóa đơn, thẳng và đủ sáng.';
+  }
+  if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') {
+    return 'Ảnh hóa đơn không còn khả dụng. Hãy chọn và tải lên ảnh mới.';
+  }
+  return 'Không thể đọc hóa đơn. Hãy thử lại với ảnh rõ hơn.';
+}
 
 interface ReceiptItemState {
   id: string;
@@ -45,6 +68,7 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
   const [pollError, setPollError] = useState<string | null>(
     receiptScanId ? null : 'Không tìm thấy bản quét hóa đơn. Vui lòng quay lại và quét ảnh mới.'
   );
+  const [pollRefresh, setPollRefresh] = useState(0);
   const isPending = liveReceipt.status === 'pending' || liveReceipt.status === 'processing';
   const isReady = liveReceipt.status === 'ready' || liveReceipt.status === 'confirmed';
 
@@ -54,28 +78,37 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
     if (!liveReceipt.id || !isPending) return;
     let cancelled = false;
     let attempts = 0;
+    let timer: number | undefined;
     const poll = async () => {
       try {
         const next = await api.getScan(liveReceipt.id);
         if (cancelled) return;
+        setPollError(null);
         setLiveReceipt(next);
         if (next.status === 'pending' || next.status === 'processing') {
           attempts += 1;
-          if (attempts < 60) window.setTimeout(poll, 1000);
-          else setPollError('Bản quét đang mất nhiều thời gian hơn dự kiến. Vui lòng thử lại sau.');
+          if (attempts < 90) timer = window.setTimeout(poll, 1000);
+          else setPollError('Hóa đơn đang xử lý lâu hơn dự kiến. Bạn có thể kiểm tra lại hoặc chọn ảnh mới.');
         } else if (next.status === 'failed') {
-          setPollError('Không thể đọc hóa đơn. Vui lòng thử lại với ảnh rõ nét hơn.');
+          setPollError(receiptErrorText(next.errorCode, next.errorMessage));
         }
       } catch {
-        if (!cancelled) setPollError('Không thể cập nhật trạng thái hóa đơn. Vui lòng tải lại trang.');
+        if (cancelled) return;
+        setPollError('Không thể cập nhật trạng thái hóa đơn. Kiểm tra kết nối rồi thử lại.');
+        attempts += 1;
+        if (attempts < 90) {
+          timer = window.setTimeout(poll, 1000);
+        } else {
+          setPollError('Không thể cập nhật hóa đơn trong thời gian cho phép. Bạn có thể kiểm tra lại hoặc chọn ảnh mới.');
+        }
       }
     };
-    const timer = window.setTimeout(poll, 500);
+    timer = window.setTimeout(poll, 500);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [liveReceipt.id, isPending]);
+  }, [liveReceipt.id, isPending, pollRefresh]);
 
   const [items, setItems] = useState<ReceiptItemState[]>([]);
   useEffect(() => {
@@ -165,8 +198,23 @@ const ReceiptReview: React.FC<{ receiptScanId: string | null }> = ({ receiptScan
           </div>
         )}
         {pollError && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-            {pollError}
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{pollError}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {isPending && (
+                <button className="underline font-semibold" onClick={() => { setPollError(null); setPollRefresh((value) => value + 1); }}>
+                  Kiểm tra lại
+                </button>
+              )}
+              {!isPending && !isReady && (
+                <button className="underline font-semibold" onClick={() => navigate('/scan')}>
+                  Quét ảnh mới
+                </button>
+              )}
+            </div>
           </div>
         )}
         {/* Receipt Header Card */}

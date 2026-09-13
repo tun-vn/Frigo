@@ -62,6 +62,13 @@
     "APP_URL": "https://frigo.tungjpstore.net",
     "AI_MOCK_MODE": "false",
     "SCAN_QUEUE_MODE": "async",
+    "QWEN_BASE_URL": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "QWEN_MODEL": "qwen3.7-flash",
+    "GROQ_FALLBACK_ENABLED": "false",
+    "CLOUDFLARE_VISION_FALLBACK": "false",
+    "GLM_FALLBACK_ENABLED": "false",
+    "DEEPSEEK_FALLBACK_ENABLED": "false",
+    "CLEANUP_RESERVED_SCAN_RETENTION_MINUTES": "60",
     "WEEK_SCHEMA_MODE": "dual",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAEqYwPIUD6OGmNNQ"
   },
