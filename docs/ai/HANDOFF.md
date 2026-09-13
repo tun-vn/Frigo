@@ -44,18 +44,19 @@ DEPLOYED_MAIN_SHA:
 `d1b06732f8a80db4e77986df31ff28d9f04641fa`
 
 PRODUCTION_WORKER_VERSION:
-`48e0c366-3c8a-4f2b-a2d5-965785995431` (100% traffic)
+`df7225c9-6f20-4206-9f16-573de6a69c43` (100% traffic)
 
 OCR_RECOVERY_BRANCH: `codex/ocr-production-recovery`
 
 OCR_RECOVERY_BASE_SHA:
 `d8ca112a5ac5eb215f36a3f89b4218e2fc691371`
 
-OCR_RECOVERY_STATUS: **CANDIDATE / NOT DEPLOYED**
+OCR_RECOVERY_STATUS: **DEPLOYED AND VERIFIED**
 
-OCR_RECOVERY_CHECKPOINT: 2026-09-13; implementation `ec87aec` and documentation
-`56968ba` are pushed on the feature branch. The deployed Worker and production D1 remain
-at the receipt above until a separately authorized release is verified.
+OCR_RECOVERY_CHECKPOINT: 2026-09-13; implementation `ec87aec` merged as
+`bdb0dda0b1123c4fd940058091e3cb285d5e8eb8`. Worker version
+`df7225c9-6f20-4206-9f16-573de6a69c43` serves 100% traffic and production D1 is
+at migration `0023`.
 
 ## Current status
 
@@ -177,17 +178,15 @@ receipt or authorize a deployment.
   provider credentials or raw image content.
 - The candidate adds additive migration `0023_scan_request_fingerprint.sql`.
   Local replay/schema checks cover `0001`-`0023`; production D1 now includes
-  `0023` after the retained pre-0023 export. Worker deployment remains pending.
+  `0023` after the retained pre-0023 export. Worker deployment is verified.
 
 Focused local checks and the full candidate gates passed on 2026-09-13:
 `pnpm check` reports 1,579 tests / 93 files PASS, lint/typecheck/migration replay
 through `0023` and build PASS; hosted PR #17 CI run `34728606704` is also green.
-Live provider access is not verified: a read-only
-`https://api.b.ai/v1/models` probe with the supplied test credential returned
-HTTP 401 (`Invalid token`); the credential was not persisted or echoed in
-repository files. No remote migration, production secret change, Worker
-deployment, hosted CI, readiness or canary result was performed for this
-candidate.
+Live provider access is verified: a non-PII Qwen smoke returned HTTP 200 with
+model `qwen3.7-flash` and `OK`; the key value is not stored in the repository or
+logs. No separate staged canary was used; the guarded deploy went to 100% after
+backup, migration and schema gate.
 
 ## Deployment and production boundary
 
@@ -196,14 +195,9 @@ occurred. The GitHub production environment/secrets are not provisioned, so the
 approved release was deployed directly with Wrangler OAuth from a clean SHA
 checkout; the same schema, smoke and readiness receipts were captured locally.
 
-The OCR recovery candidate is not included in that deployment. Production still
-reports the recorded `d1b06732` application receipt and Worker version until a
-new exact-SHA deployment/readiness receipt is independently captured.
-
-Wrangler is not authenticated in the local checkout. The OAuth login URL was
-opened by `npx wrangler login`, but browser automation was unavailable, so the
-operator must complete the Cloudflare authorization in Chrome before any remote
-migration, secret update or deploy command can run.
+Production now reports candidate commit `bdb0dda0…`; readiness and liveness smoke
+passed after deployment. Wrangler OAuth is authenticated as `tungbipdz@gmail.com`
+for account `ef250a88911fd24073cb73d1c07e0218`.
 
 PRODUCTION LOCAL RECONCILIATION COMPLETE - SCHEMA/CODE CUTOVER VERIFIED
 
@@ -251,7 +245,7 @@ No real payment performed.
 
 ## Next task
 
-Next task: COMPLETE OCR RECOVERY VALIDATION BEFORE GUARDED DEPLOYMENT
+Next task: MONITOR OCR QUALITY/LATENCY AND SCHEDULE REACT ROUTER UPGRADE
 
 Keep the deployed Worker and planner flags at safe defaults while the OCR
 candidate is validated. Run focused provider/queue/UI tests and all required
