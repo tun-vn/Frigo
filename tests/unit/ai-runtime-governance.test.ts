@@ -251,6 +251,21 @@ describe('Qwen task runtime governance', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the primary response when the shadow scheduler throws', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response('hello'));
+    const governance = createGovernanceConfig({ AI_SHADOW_CANARY_PERCENT: '100' }, { qwenOnly: true });
+    const runtime = new QwenTaskRuntime({
+      qwenApiKey: 'qwen-key',
+      qwenOnly: true,
+      governance,
+      backgroundExecutor: () => { throw new Error('scheduler unavailable'); },
+    });
+
+    await expect(runtime.generate({ task: 'fridge_chat', input: 'hello' }))
+      .resolves.toMatchObject({ value: 'hello', attempts: 1 });
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
   it('does not schedule shadow work when the canary percentage is zero', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response('hello'));
     const scheduled: Promise<unknown>[] = [];
