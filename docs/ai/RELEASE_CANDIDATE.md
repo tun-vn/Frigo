@@ -87,7 +87,8 @@ returned HTTP 401 (`Invalid token`); the credential was not persisted.
 
 The candidate adds `0023_scan_request_fingerprint.sql` for durable scan replay
 identity. Local candidate checks must cover migrations `0001`-`0023`; production
-D1 remains at `0022` until the migration is explicitly applied during release.
+D1 migration `0023` was applied remotely on 2026-09-13 after a retained
+pre-0023 export; the Worker is still not deployed.
 
 ## Production
 

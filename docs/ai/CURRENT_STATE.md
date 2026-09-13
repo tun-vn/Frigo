@@ -71,13 +71,13 @@ schema/Week checks are recorded in the receipt below.
 - Previous docs-cleanup deploy workflow `34405457796`: **SUCCESS**.
 - Release packaging completed.
 - Staging was not provisioned; no staging deployment occurred.
-- Production DB migration: **COMPLETE** - D1 `frigo-db` ledger contains exactly `0001` through `0022`; `0019` -> `0022` were applied in order before the Worker cutover.
+- Production DB migration: **COMPLETE** - D1 `frigo-db` ledger contains exactly `0001` through `0023`; `0023` was applied additively on 2026-09-13 after the retained backup.
 - Production deployment: **COMPLETE** - Worker deployed directly with Wrangler OAuth from clean SHA `d1b06732f8a80db4e77986df31ff28d9f04641fa` because the GitHub production environment/secrets are not provisioned.
 - Production reconciliation: **COMPLETE** - post-cutover source, schema, health and traffic checks passed.
 - Active deployment: Cloudflare version `48e0c366-3c8a-4f2b-a2d5-965785995431`, 100% traffic, deployed 2026-09-10T21:08:00Z.
-- OCR recovery candidate: **NOT DEPLOYED**. No remote migration, production
-  deploy, secret change or live-provider smoke was performed for this candidate;
-  the deployed source SHA still predates the typed provider/quality-gate changes.
+- OCR recovery candidate: **MIGRATION APPLIED / WORKER NOT DEPLOYED**. Remote D1
+  `0023` is applied and gated; no Worker deploy or secret change was performed.
+  The deployed source SHA still predates the typed provider/quality-gate changes.
 - Planner rollout: NOT STARTED.
 - No production secrets were changed; existing secret names include `JWT_SECRET`,
   `OTP_HASH_SECRET`, `TURNSTILE_SECRET_KEY`, `QWEN_API_KEY` and optional
@@ -114,8 +114,9 @@ The candidate addresses provider/model recovery and scan failure handling withou
 changing the production receipt above:
 
 - Candidate schema now includes additive migration `0023_scan_request_fingerprint.sql`;
-  local replay and schema checks must cover `0001`-`0023`. Production D1 remains
-  at `0022` until this migration is explicitly applied during the guarded release.
+  local replay and schema checks cover `0001`-`0023`. Production D1 migration
+  `0023` was applied after backup `.artifacts/frigo-db-pre-ocr-20260913T005253Z.sql`
+  (SHA-256 `bc62e5844c6a838a3b1b98d29dffa39c9d6cf6e1d570617e843c9e3e820bb088`).
 
 - Qwen `qwen3.7-flash` is the primary provider for vision, receipt OCR, chat and
   recipe ranking through the DashScope international OpenAI-compatible endpoint
@@ -170,8 +171,8 @@ changing the production receipt above:
   readiness and canary evidence remain **PENDING**; do not infer production
   readiness from CI alone.
 - Wrangler OAuth is currently unauthenticated on the local machine. `wrangler
-  login` opened the Cloudflare authorization URL, but the desktop browser bridge
-  was unavailable; no deployment or remote migration was attempted.
+  login` is now complete for `tungbipdz@gmail.com` (account
+  `ef250a88911fd24073cb73d1c07e0218`).
 
 ## PR #8 metadata
 

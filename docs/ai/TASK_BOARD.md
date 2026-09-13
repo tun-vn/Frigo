@@ -34,7 +34,7 @@
 ## Next authorized work
 
 - Production Reconciliation ✅ COMPLETE - post-cutover verified
-- Production DB Migration ✅ COMPLETE - `frigo-db` ledger `0001`-`0022`
+- Production DB Migration ✅ COMPLETE - `frigo-db` ledger `0001`-`0023`
 - Controlled Production Deployment ✅ COMPLETE - Worker SHA `d1b06732`
 - OCR production recovery (maintenance) ⏳ IN PROGRESS - candidate not deployed
 - Planner Rollout ⏳
@@ -55,7 +55,7 @@ Main Integration: COMPLETE.
 PRE_CLEANUP_MAIN_HEAD: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
 APPLICATION INTEGRATION: complete in main at `23ef51d6ec12a5a3e319a2d941dca39d2775cb9d`.
 Production reconciliation: COMPLETE - schema/code/health/traffic verified.
-Production DB migration: COMPLETE - exact ledger `0001` through `0022`.
+Production DB migration: COMPLETE - exact ledger `0001` through `0023`.
 Production deployment: COMPLETE - version `48e0c366-3c8a-4f2b-a2d5-965785995431`.
 Planner rollout: NOT STARTED.
 OCR recovery status: IN PROGRESS - VALIDATION PENDING.
@@ -129,7 +129,7 @@ has not changed remote D1, production secrets or Worker traffic.
 | Provider/model | Qwen `qwen3.7-flash` via DashScope international (`QWEN_BASE_URL`/`QWEN_MODEL`) is primary for vision, receipt OCR, chat and ranking; Groq is disabled unless `GROQ_FALLBACK_ENABLED=true`; Cloudflare vision fallback is opt-in via `CLOUDFLARE_VISION_FALLBACK`; DeepSeek requires `DEEPSEEK_FALLBACK_ENABLED=true` and GLM requires `GLM_FALLBACK_ENABLED=true` | Not deployed; current Worker remains the recorded `d1b06732` release |
 | Output quality | Zod validation plus rejection of generic/placeholder labels and confidence below `0.6`; empty usable output is `AI_SCAN_NO_USABLE_ITEMS` | OCR remains untrusted draft data and requires review/confirmation |
 | Queue failures | Typed permanent `MODEL_NOT_FOUND`/auth/permission/license/schema/invalid-response/quality failures; bounded retries for `REQUEST_TIMEOUT`/`NETWORK_ERROR`/`RATE_LIMITED`/`UPSTREAM_ERROR` | Existing lease, idempotency, tenant fencing, max attempts and DLQ remain authoritative |
-| Schema/data | Additive `0023_scan_request_fingerprint.sql`; no backfill or inventory/auth/Week/PayOS change | Local candidate covers `0001`-`0023`; remote D1 remains at `0022` until explicit guarded migration before deploy |
+| Schema/data | Additive `0023_scan_request_fingerprint.sql`; no backfill or inventory/auth/Week/PayOS change | Local and remote D1 cover `0001`-`0023`; Worker deploy remains pending |
 | Verification | Local `pnpm check` and hosted PR #17 CI run `34728606704` PASS on 2026-09-13: 1,579 tests / 93 files, lint, typecheck, migration replay through 0023 and build; live-provider/canary evidence pending (B.AI `/v1/models` probe returned 401) | Do not claim release or readiness until exact-SHA receipts exist |
 
 Candidate commits `ec87aec` and `56968ba` are pushed on

@@ -176,8 +176,8 @@ receipt or authorize a deployment.
 - Scan status responses expose bounded failure codes and retry metadata without
   provider credentials or raw image content.
 - The candidate adds additive migration `0023_scan_request_fingerprint.sql`.
-  Local replay/schema checks cover `0001`-`0023`; production D1 remains at
-  `0022` until an explicitly authorized guarded migration step.
+  Local replay/schema checks cover `0001`-`0023`; production D1 now includes
+  `0023` after the retained pre-0023 export. Worker deployment remains pending.
 
 Focused local checks and the full candidate gates passed on 2026-09-13:
 `pnpm check` reports 1,579 tests / 93 files PASS, lint/typecheck/migration replay

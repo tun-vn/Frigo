@@ -293,11 +293,11 @@ exact-head hosted CI; deployment and all payment work remain separate owner acti
 - Queue phân loại lỗi provider: model/auth/permission/license/schema/quality là
   permanent; timeout/network/429/5xx/upstream mới được retry trong giới hạn
   attempts/DLQ hiện có. Candidate thêm migration additive
-  `0023_scan_request_fingerprint.sql` để ràng buộc replay với đúng ảnh/MIME; phải
-  apply và schema-gate migration này trước deploy. Không có backfill, secret
+  `0023_scan_request_fingerprint.sql` để ràng buộc replay với đúng ảnh/MIME; đã
+  apply và schema-gate remote sau backup ngày 2026-09-13. Không có backfill, secret
   change hay thay đổi PayOS/auth/Week trong candidate.
 - Local candidate gates đã PASS ngày 2026-09-13: `pnpm check` chạy 1.579 test /
   93 file, lint, typecheck, migration replay tới `0023` và build. Live-provider
-  smoke, migration/apply remote, readiness, canary và deployment vẫn
+  smoke, readiness, canary và Worker deployment vẫn
   **PENDING**; hosted PR #17 CI `34728606704` đã PASS; không suy diễn từ các
   gate lịch sử của M27.
