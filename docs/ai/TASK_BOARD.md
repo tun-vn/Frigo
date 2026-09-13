@@ -145,3 +145,20 @@ has not changed remote D1, production secrets or Worker traffic.
 Candidate commits `ec87aec` and `56968ba` were merged through PR #17. Local and
 hosted validation, live Qwen smoke, migration, deployment and readiness receipts
 are complete; continue monitoring OCR quality and latency.
+
+## Qwen-only runtime / cost governance candidate (2026-09-13)
+
+| Area | Status | Evidence / next action |
+| --- | --- | --- |
+| Task taxonomy and logical role routing | IMPLEMENTED LOCALLY | `packages/ai/src/model-governance.ts`, `task-runtime.ts`; routing coverage is included in the full 1,606-test gate |
+| Qwen-only Worker composition | IMPLEMENTED LOCALLY | scan HTTP, queue and explanation use shared config; production vars set `AI_QWEN_ONLY=true`; legacy adapters are not constructed on this path |
+| Budgets, structured validation and escalation | IMPLEMENTED LOCALLY | bounded attempts/calls/tokens, Zod parse, quality gate, repair and model-capability fallback tests pass |
+| Cost/usage telemetry | IMPLEMENTED LOCALLY | `AIUsageLedger`, non-PII Worker usage logs, provider usage parsing, and shadow budget reservation |
+| Golden fixtures / offline harness | IMPLEMENTED LOCALLY | `tests/fixtures/ai-golden.json`; `pnpm ai:eval -- --dry-run` PASS with no live request |
+| Local application checkpoint | `21c442d` | `pnpm check` PASS: 1,606 tests / 95 files, lint/typecheck/migrations/build PASS |
+| Production deployment | NOT AUTHORIZED | Do not deploy; obtain review, benchmark and hosted CI evidence first |
+
+The candidate branch is based on canonical main SHA
+`05423f2ad675006a4c7913e696f1979b3fcaae59`; canonical main and production
+remain untouched. Reasoning and judge roles are disabled by default, and the
+rolling `qwen3.7-flash` alias is canary-only.

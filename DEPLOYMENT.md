@@ -143,20 +143,15 @@ exact-SHA deployment and readiness receipt are captured, the candidate must be
 treated as unreleased and production remains on the previously recorded Worker
 SHA.
 
-The candidate sends vision, receipt, chat and ranking requests to Qwen
-`qwen3.7-flash` through the DashScope international OpenAI-compatible endpoint
-(`QWEN_BASE_URL`, `QWEN_MODEL`). Qwen is the first provider in every applicable
-route and structured requests disable thinking to keep OCR latency bounded.
-Confirm model access with a live, non-PII provider smoke before approval. Groq is
-kept as a legacy compatible fallback only when `GROQ_FALLBACK_ENABLED=true`;
-merely storing `GROQ_API_KEY` does not enable it alongside Qwen. Native
-Cloudflare vision is only added when
-`CLOUDFLARE_VISION_FALLBACK=true`, and its model/license must be verified
-separately. DeepSeek remains the optional text/ranking fallback when
-`DEEPSEEK_FALLBACK_ENABLED=true`, and Z.ai/GLM the optional vision/text
-extension path when `GLM_FALLBACK_ENABLED=true`; a future GLM-5.3 Flash upgrade requires a
-separate model/access verification. Never enable mock output in production to
-mask provider failure.
+The candidate sends all production AI work through the task-based Qwen runtime.
+`AI_QWEN_ONLY=true` prevents construction of Groq, DeepSeek, GLM and native
+Cloudflare adapters. The pinned text role is `qwen3.7-flash-2026-07-15`, OCR is
+`qwen-vl-ocr` with a Qwen multimodal fallback, and fridge image analysis uses
+`qwen3.8-flash`; the rolling `qwen3.7-flash` value is canary-only. Physical
+model IDs are configured by `AI_MODEL_*`, not feature code. Confirm model access
+with a live, non-PII provider smoke before approval. Reasoning and judge roles
+are disabled by default; a future GLM-5.3 Flash upgrade requires separate model
+and access verification. Never enable mock output in production to mask failure.
 
 Every fridge/receipt response is validated against the Zod contract and a
 deterministic quality gate. Generic or placeholder labels and confidence below
@@ -180,6 +175,7 @@ gated; development runs via `pnpm dev:worker`, which forces
 `--var ENVIRONMENT:development`.
 
 Fatal in production: missing/invalid/non-HTTPS `APP_URL` (including loopback), `AI_MOCK_MODE=true`,
+`AI_ENABLED=false`, `AI_QWEN_ONLY=false`, non-Qwen `AI_MODEL_*` aliases,
 `WEEK_SCHEMA_MODE != dual`, `SCAN_QUEUE_MODE != async`, missing `DB`,
 `CACHE`, `JWT_SECRET`, `OTP_HASH_SECRET`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`,
 missing `QWEN_API_KEY`, missing `SCAN_QUEUE` while async, or missing `IMAGES` while
@@ -200,16 +196,17 @@ stabilization patch. Rotating the OTP key invalidates outstanding challenges;
 there is no multi-key fallback, so coordinate intentional rotation and code
 resends rather than changing the key on every deployment.
 
-The OCR recovery candidate defaults to Qwen `qwen3.7-flash` through
-`QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1` and
-`QWEN_MODEL=qwen3.7-flash` (`packages/ai/src/providers/qwen.ts`).
-`GROQ_FALLBACK_ENABLED=false` keeps the legacy Groq adapter out of the provider
-chain; `CLOUDFLARE_VISION_FALLBACK=false` likewise keeps native Cloudflare vision
-opt-in. `DEEPSEEK_FALLBACK_ENABLED=false` and `GLM_FALLBACK_ENABLED=false` keep
-those extension providers disabled until explicitly enabled. The AI/provider
-owner must confirm model access and capture a non-PII live smoke before
-deployment; mock-AI tests and the isolated preview do not verify live provider
-availability.
+The Qwen runtime uses `QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
+for the fetch-compatible provider. The legacy `QWEN_MODEL=qwen3.7-flash` value
+is retained for compatibility-only callers; production task routing resolves
+physical models from the `AI_MODEL_*` role aliases (pinned text
+`qwen3.7-flash-2026-07-15`, OCR `qwen-vl-ocr`, and multimodal
+`qwen3.8-flash`). `GROQ_FALLBACK_ENABLED=false`,
+`CLOUDFLARE_VISION_FALLBACK=false`, `DEEPSEEK_FALLBACK_ENABLED=false` and
+`GLM_FALLBACK_ENABLED=false` keep legacy/extension providers out of the
+Qwen-only production chain. The AI/provider owner must confirm each configured
+model and capture a non-PII live smoke before deployment; mock-AI tests and the
+isolated preview do not verify live provider availability.
 
 Warnings (reported, non-blocking): no email provider (`SEND_EMAIL` binding or
 `RESEND_API_KEY`), missing `PLUS_GRANT_SECRET`. Turnstile is not optional in

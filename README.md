@@ -64,10 +64,10 @@ Dự án tuân thủ phân tách nghiêm ngặt giữa **UI**, **API Worker**, *
   * **Queues:** Hàng đợi xử lý ảnh AI Vision nền (`frigo-scan-queue`).
   * **Turnstile:** Chuẩn bị sẵn cơ chế chống bot và rate-limiting.
 * **AI Architecture:**
-  * Lớp trừu tượng `AIRouter` (không gọi trực tiếp SDK trong business logic).
-  * **Primary AI (vision, receipt OCR, chat, ranking):** Qwen `qwen3.7-flash` qua DashScope international endpoint (`QWEN_BASE_URL`, `QWEN_MODEL`). Thinking được tắt cho các request có cấu trúc để giảm độ trễ.
-  * **Fallback paths:** Qwen luôn được thử trước; Groq chỉ được thêm khi `GROQ_FALLBACK_ENABLED=true`, Cloudflare Vision chỉ khi `CLOUDFLARE_VISION_FALLBACK=true`, rồi mới đến các adapter GLM/DeepSeek đã được bật rõ ràng.
-  * **Extension providers:** DeepSeek giữ vai trò fallback cho text/ranking khi `DEEPSEEK_FALLBACK_ENABLED=true`; Z.ai/GLM giữ adapter vision/text khi `GLM_FALLBACK_ENABLED=true`. Có thể nâng model GLM (ví dụ GLM-5.3 Flash) ở một thay đổi cấu hình/adapter riêng, không tự động bật trong production.
+  * Lớp `AIRouter`/`QwenTaskRuntime` nhận task logic (`recipe_generation`, `receipt_ocr`, `fridge_image_analysis`, `weekly_plan`, ...), không nhận physical model từ feature code.
+  * Production bật `AI_QWEN_ONLY=true`: runtime chọn các role `QWEN_FAST`, `QWEN_MULTIMODAL`, `QWEN_OCR`, `QWEN_REASONING` và `QWEN_JUDGE` theo policy; Groq/DeepSeek/GLM/Cloudflare chỉ còn adapter tương thích legacy khi Qwen-only tắt.
+  * Model aliases, prompt versions, token/call ceilings, retry/escalation và giá ước tính tập trung trong `packages/ai/src/model-governance.ts`; usage telemetry không ghi prompt, ảnh hay secret.
+  * **Pinned default:** text dùng `qwen3.7-flash-2026-07-15`; `qwen3.7-flash` chỉ là canary. OCR dùng `qwen-vl-ocr` với escalation Qwen multimodal; reasoning/judge mặc định tắt.
   * **Fallback Mock Mode:** Tích hợp `AI_MOCK_MODE=true` giả lập kết quả thực tế cho kiểm thử local mà không cần API key ngoài.
   * **Strict Structured Output:** JSON được kiểm duyệt qua Zod và quality gate; nhãn placeholder hoặc confidence dưới `0.6` không được tạo bản nháp. Lỗi provider được phân loại để queue chỉ retry lỗi tạm thời; production không dùng mock để che lỗi.
 * **Testing & Quality:** Vitest (Unit test scoring engine, AI schemas), strict TypeScript, ESLint, Prettier.
@@ -242,14 +242,15 @@ pnpm wrangler secret put TURNSTILE_SECRET_KEY
 pnpm wrangler secret put GROQ_API_KEY
 ```
 
-Model/route vars are non-secret configuration:
-`QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1`,
-`QWEN_MODEL=qwen3.7-flash`, `GROQ_FALLBACK_ENABLED=false`,
-`CLOUDFLARE_VISION_FALLBACK=false`, `GLM_FALLBACK_ENABLED=false`, and
-`DEEPSEEK_FALLBACK_ENABLED=false`. Groq remains an optional legacy fallback;
-do not enable it merely by storing `GROQ_API_KEY`. Run a non-PII provider smoke
-and the guarded workflow in `DEPLOYMENT.md` before representing candidate
-settings as production state.
+Model/route vars are non-secret configuration. Production sets
+`AI_ENABLED=true`, `AI_QWEN_ONLY=true`, `AI_ALLOW_REASONING_MODEL=false`,
+`AI_ALLOW_JUDGE_MODEL=false`, bounded call/token ceilings and the role aliases
+documented in [docs/ai/QWEN_RUNTIME.md](docs/ai/QWEN_RUNTIME.md). The legacy
+`QWEN_MODEL=qwen3.7-flash` value is retained for compatibility but is not the
+pinned task-runtime model when `AI_MODEL_FAST` is present. Groq, Cloudflare,
+GLM and DeepSeek flags remain false. Run a non-PII provider smoke and the
+guarded workflow in `DEPLOYMENT.md` before representing candidate settings as
+production state.
 
 ### Bước 4: Deploy
 ```bash

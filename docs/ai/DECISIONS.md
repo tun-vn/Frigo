@@ -597,3 +597,30 @@ server/provider timeout recovery already deployed.
 **Release boundary:** No production deployment, schema, storage, auth, payment
 or provider configuration change is implied. Promote only after browser/device
 OCR smoke confirms item recall and latency against the attached receipt.
+
+## ADR-021 — Task-based Qwen runtime and production model governance
+
+**Status:** Accepted 2026-09-13 (architecture maintenance branch)
+
+**Decision:** Add a single task-based runtime behind `AIRouter`. Feature and
+domain code submit a semantic task and compact input; the runtime resolves a
+logical Qwen role, applies per-task prompts and token ceilings, validates
+structured output, performs at most one repair and one policy-approved
+escalation, and emits non-PII usage/cost telemetry. Production composition sets
+`AI_QWEN_ONLY=true`, so legacy Groq, DeepSeek, GLM and native Cloudflare adapters
+are not constructed. Physical model IDs are configurable only through Worker
+role aliases (`AI_MODEL_*`). Reasoning and judge roles are explicit opt-ins and
+remain off for customer traffic by default.
+
+**Rationale:** A centralized policy prevents accidental expensive-model use,
+unbounded retries, provider drift and model names leaking into application
+services. Qwen remains the only production inference family while preserving
+legacy adapters for test/migration compatibility when Qwen-only mode is not
+requested.
+
+**Consequences:** OCR and fridge vision still return untrusted candidates. The
+quality gate, deterministic normalization, inventory fencing and reconciliation
+remain authoritative. Estimated pricing is operational telemetry, not billing
+truth. The rolling `qwen3.7-flash` alias is canary-only; promotion requires an
+offline golden-dataset comparison and an explicit configuration review. This
+branch changes no canonical `main` code and performs no deployment.

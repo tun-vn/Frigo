@@ -230,3 +230,29 @@ The deployed receipt is anchored to main SHA
 - Status: **COMMITTED LOCALLY / NOT DEPLOYED** at `ba3d872eea2d677e38f94adb8355f493c4c45852`.
   Next action is device/browser OCR smoke with the attached receipt, then open
   the release review for promotion.
+
+## Qwen runtime governance candidate (2026-09-13)
+
+- Working branch: `feat/qwen-ai-runtime-cost-router`.
+- Base SHA: `05423f2ad675006a4c7913e696f1979b3fcaae59` (`github-frigo/main`).
+  Canonical `main` is unchanged; no production deployment is authorized.
+- Application checkpoint: `21c442d` (`feat(ai): add governed qwen task runtime`).
+  Documentation remains a separate local checkpoint after this implementation.
+- Added `QwenTaskRuntime`, model-role governance, versioned prompt registry,
+  centralized pricing, bounded budgets/escalation, structured validation and
+  isolate-safe usage telemetry. Production Worker composition now explicitly
+  builds this path with `AI_QWEN_ONLY=true` and the role aliases in
+  `wrangler.jsonc`.
+- Scan HTTP, scan queue and meal explanation constructors share the same
+  server-side AI config helper. Legacy non-Qwen adapters remain only for
+  compatibility when Qwen-only mode is not selected; they are not constructed
+  by the production path.
+- Offline golden fixtures and `pnpm ai:eval -- --dry-run` were added. No live
+  Alibaba request is made by tests or CI. Optional shadow traffic is disabled
+  by default and now reserves its call/token budget before launching.
+- Final local verification: `pnpm check` PASS with 1,606 tests / 95 files,
+  lint, typecheck, migration replay and production build all PASS. The check
+  intentionally skipped remote D1 schema and Week parity because no release
+  flag was supplied. `pnpm ai:eval -- --dry-run` and `git diff --check` PASS.
+- Next action: request code review or a separately authorized benchmark. Do not
+  merge, migrate remotely or deploy this branch.

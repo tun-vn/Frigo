@@ -51,13 +51,13 @@ and watch queue metrics plus `scan_queue_jobs` status transitions. Roll back to
 `sync` if retry rate, consumer lag, or failed jobs increase; pending scans can
 then be reprocessed by the synchronous endpoint without changing the D1 schema.
 
-For the OCR recovery candidate, verify Qwen `qwen3.7-flash` through the configured
-DashScope international endpoint and any explicitly enabled Groq, Cloudflare or
-GLM fallback with a non-PII provider smoke before deployment. Groq is disabled by
-default unless `GROQ_FALLBACK_ENABLED=true`; Cloudflare vision is enabled only by
-`CLOUDFLARE_VISION_FALLBACK=true`; DeepSeek and GLM require their corresponding
-explicit fallback flags. A model/license/configuration failure is not
-repaired by replaying the same message; fix configuration or upload a new scan.
+For the Qwen runtime candidate, verify the role aliases and DashScope access with
+a non-PII provider smoke before deployment. Production sets
+`AI_QWEN_ONLY=true`, so Groq, Cloudflare, DeepSeek and GLM are not constructed;
+their adapters remain compatibility-only when Qwen-only mode is disabled.
+Reasoning/judge roles are off by default. A model/license/configuration failure
+is not repaired by replaying the same message; fix configuration or upload a
+new scan.
 The recovery adds migration `0023_scan_request_fingerprint.sql` and must remain
 marked unreleased until exact-SHA CI, guarded migration, readiness and canary
 evidence are recorded.

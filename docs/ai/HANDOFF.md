@@ -269,3 +269,54 @@ Do not touch PayOS/payment or use a down-migration. Rollback remains code-only t
 reserve D1 restore/export for an incident. Configure the GitHub `production`
 environment, `PRODUCTION_URL` and Cloudflare secrets before the next guarded
 release, and schedule the tested React Router major upgrade separately.
+
+## Qwen runtime governance candidate (current task)
+
+WORKING_BRANCH: `feat/qwen-ai-runtime-cost-router`
+
+BASE_SHA: `05423f2ad675006a4c7913e696f1979b3fcaae59`
+
+CANONICAL_MAIN_CHANGED: **NO**
+
+PRODUCTION_DEPLOYED: **NO CHANGE / NOT AUTHORIZED**
+
+The branch adds a fetch-compatible `QwenTaskRuntime` behind `AIRouter`. Tasks
+resolve to logical roles (`QWEN_FAST`, `QWEN_FAST_CANARY`, `QWEN_MULTIMODAL`,
+`QWEN_OCR`, `QWEN_REASONING`, `QWEN_JUDGE`) in one governance table. Physical
+model IDs are supplied only by `AI_MODEL_*` configuration. Normal text uses the
+pinned `qwen3.7-flash-2026-07-15`; OCR uses `qwen-vl-ocr`; multimodal work uses
+`qwen3.8-flash`; reasoning and judge are disabled unless explicitly enabled.
+
+The runtime enforces per-task input/output budgets, a per-operation call/token
+ceiling, one repair plus one policy-approved escalation, Zod structured-output
+validation, scan quality gates and cost metadata. `AIUsageLedger` aggregates
+task/model calls, tokens, costs, failures, retries, escalation and latency;
+Worker logs include only non-PII metadata. `AI_QWEN_ONLY=true` prevents legacy
+Groq, DeepSeek, GLM and native Cloudflare providers from being constructed.
+
+Inventory safety is unchanged: AI returns observation/candidate data only. The
+existing normalization, validation, review, reconciliation, fencing and
+idempotent inventory command remain the sole authority for mutations.
+
+Offline evaluation assets are `tests/fixtures/ai-golden.json`,
+`tests/unit/ai-golden-dataset.test.ts` and `scripts/ai-eval.mjs`; run
+`pnpm ai:eval -- --dry-run`. The command makes no live provider call and no CI
+test requires an Alibaba credential.
+
+Verification recorded for this checkpoint:
+
+- Application checkpoint: `21c442d`.
+- `pnpm check`: PASS — 1,606 tests / 95 files; lint, typecheck, migration replay
+  and production build all PASS. Remote D1 schema and Week parity checks were
+  skipped because no release flags were supplied.
+- `pnpm ai:eval -- --dry-run`: PASS; fixture-only report, no Alibaba/Qwen call.
+- `git diff --check`: PASS after the documentation edits.
+- Focused governance/configuration/explanation suite: 102/102 PASS after the
+  shadow reservation guard; queue/idempotency regression coverage remains green.
+- Secret scan, protected-path scan and provider/model search were clean. No
+  PayOS/payment, unrelated auth, remote migration, merge or deployment action
+  was performed.
+
+Next action: request code review or a separately authorized Qwen benchmark, then
+promote a pinned alias only through the documented golden-dataset process. Do
+not merge, migrate remotely or deploy from this branch.
