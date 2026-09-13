@@ -214,6 +214,18 @@ Production deployment: COMPLETE - readiness commit matches `d1b06732...`
 Planner rollout: NOT STARTED. `PLUS_GRANT_SECRET` remains intentionally absent
 and is reported as a warning; no secret values were read or changed.
 
+## OCR image optimization candidate (2026-09-13)
+
+`src/web/lib/private-image.ts` contains an uncommitted client-side optimization:
+gallery images are decoded in memory, constrained to a 2,000 px longest side and
+encoded as JPEG quality 0.82 only when smaller than the source. Small images are
+not upscaled; originals are never mutated or stored; cancellation/session fencing
+and a FileReader fallback are preserved. The attached receipt measured 2,116,353
+bytes as PNG versus 382,334 bytes after a local quality-0.82 conversion (81.9%
+reduction, same dimensions). Focused privacy/image tests pass 11/11. This is not
+committed or deployed; browser/device OCR recall and latency smoke is still
+required before release.
+
 ## PR #8 authoritative metadata
 
 PR #8 METADATA:

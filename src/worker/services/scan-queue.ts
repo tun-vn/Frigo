@@ -21,7 +21,9 @@ export type QueueDecision = 'ack' | 'retry';
 
 // Keep a hung native/provider call from holding a queue lease indefinitely.
 // Provider-specific calls have their own shorter timeout where supported.
-export const SCAN_AI_TIMEOUT_MS = 25_000;
+// Leave enough wall-clock time for full-page receipt OCR while still bounding
+// a stuck provider call before the queue lease expires.
+export const SCAN_AI_TIMEOUT_MS = 75_000;
 
 export class ScanQueueError extends Error {
   constructor(
@@ -260,6 +262,7 @@ function getRouter(env: Env): AIRouter {
     qwenApiKey: env.QWEN_API_KEY,
     qwenBaseUrl: env.QWEN_BASE_URL,
     qwenModel: env.QWEN_MODEL,
+    qwenRequestTimeoutMs: Number(env.QWEN_REQUEST_TIMEOUT_MS) || undefined,
     groqApiKey: env.GROQ_API_KEY,
     groqBaseUrl: env.GROQ_BASE_URL,
     groqVisionModel: env.GROQ_VISION_MODEL,

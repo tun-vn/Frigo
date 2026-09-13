@@ -43,6 +43,7 @@ export interface Env {
   QWEN_API_KEY?: string;
   QWEN_BASE_URL?: string;
   QWEN_MODEL?: string;
+  QWEN_REQUEST_TIMEOUT_MS?: string;
 
   GROQ_API_KEY?: string;
   GROQ_BASE_URL?: string;

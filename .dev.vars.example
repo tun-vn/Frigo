@@ -12,6 +12,7 @@ AI_GATEWAY_URL=
 QWEN_API_KEY=your_qwen_api_key_here
 QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 QWEN_MODEL=qwen3.7-flash
+QWEN_REQUEST_TIMEOUT_MS=60000
 
 # Fallback Vision & Text Provider: GLM / Z.ai (Zhipu AI)
 ZAI_API_KEY=your_zai_api_key_here

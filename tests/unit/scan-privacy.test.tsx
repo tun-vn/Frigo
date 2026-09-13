@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readPrivateImage } from '../../src/web/lib/private-image';
+import { PRIVATE_IMAGE_MAX_DIMENSION, readPrivateImage } from '../../src/web/lib/private-image';
 import { resetPrivateSession } from '../../src/web/lib/private-session';
 import { ReceiptReviewPage } from '../../src/web/pages/ReceiptReviewPage';
 
@@ -80,6 +80,67 @@ describe('private image reads', () => {
     expect(reader.abort).toHaveBeenCalledOnce();
     expect(reader.onload).toBeNull();
     expect(deliver).not.toHaveBeenCalled();
+  });
+
+  it('resizes and converts a large image before reading it', async () => {
+    const deliver = vi.fn();
+    const drawImage = vi.fn();
+    const toBlob = vi.fn((callback: BlobCallback) => callback(new Blob(['compressed'], { type: 'image/jpeg' })));
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 4000, height: 3000, close: vi.fn() })));
+    vi.stubGlobal('document', { createElement: vi.fn(() => ({
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage }),
+      toBlob,
+    })) });
+
+    readPrivateImage(new Blob(['original'], { type: 'image/png' }), deliver);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const canvas = vi.mocked(document.createElement).mock.results[0]?.value as { width: number; height: number };
+    expect(canvas.width).toBe(PRIVATE_IMAGE_MAX_DIMENSION);
+    expect(canvas.height).toBe(1500);
+    expect(drawImage).toHaveBeenCalledOnce();
+    expect(toBlob).toHaveBeenCalledOnce();
+    const reader = DeferredFileReader.readers[0];
+    expect(reader.readAsDataURL).toHaveBeenCalledOnce();
+    expect(reader.readAsDataURL.mock.calls[0]?.[0]).toMatchObject({ type: 'image/jpeg' });
+    reader.result = 'data:image/jpeg;base64,compressed';
+    reader.onload?.();
+    expect(deliver).toHaveBeenCalledExactlyOnceWith(reader.result);
+  });
+
+  it('does not upscale a small image during preprocessing', async () => {
+    const deliver = vi.fn();
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 800, height: 600, close: vi.fn() })));
+    vi.stubGlobal('document', { createElement: vi.fn(() => ({
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage: vi.fn() }),
+      toBlob: (callback: BlobCallback) => callback(new Blob(['compressed'], { type: 'image/jpeg' })),
+    })) });
+
+    readPrivateImage(new Blob(['original'], { type: 'image/png' }), deliver);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const canvas = vi.mocked(document.createElement).mock.results[0]?.value as { width: number; height: number };
+    expect(canvas.width).toBe(800);
+    expect(canvas.height).toBe(600);
+  });
+
+  it('does not deliver a compressed image after cancellation', async () => {
+    let resolveBitmap: ((value: ImageBitmap) => void) | undefined;
+    vi.stubGlobal('createImageBitmap', vi.fn(() => new Promise<ImageBitmap>((resolve) => { resolveBitmap = resolve; })));
+    vi.stubGlobal('document', { createElement: vi.fn() });
+    const deliver = vi.fn();
+    const cancel = readPrivateImage(new Blob(['original'], { type: 'image/png' }), deliver);
+    cancel();
+    resolveBitmap?.({ width: 4000, height: 3000, close: vi.fn() } as ImageBitmap);
+    await Promise.resolve();
+    expect(deliver).not.toHaveBeenCalled();
+    expect(DeferredFileReader.readers).toHaveLength(0);
   });
 });
 

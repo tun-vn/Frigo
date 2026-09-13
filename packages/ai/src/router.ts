@@ -73,7 +73,7 @@ export class AIRouter {
       // Qwen is the primary multimodal/text provider. Other adapters remain
       // explicit fallbacks so a retired test model cannot silently take over.
       const qwenProvider = config.qwenApiKey
-        ? new QwenProvider(config.qwenApiKey, config.qwenBaseUrl, config.qwenModel)
+        ? new QwenProvider(config.qwenApiKey, config.qwenBaseUrl, config.qwenModel, config.qwenRequestTimeoutMs)
         : undefined;
       if (qwenProvider) {
         this.visionProviders.push(qwenProvider);

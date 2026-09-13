@@ -58,6 +58,16 @@ Production reconciliation: COMPLETE - schema/code/health/traffic verified.
 Production DB migration: COMPLETE - exact ledger `0001` through `0023`.
 Production deployment: COMPLETE - version `df7225c9-6f20-4206-9f16-573de6a69c43`.
 Planner rollout: NOT STARTED.
+
+## OCR image optimization maintenance (2026-09-13)
+
+- Browser preprocessing candidate: **IMPLEMENTED LOCALLY, NOT DEPLOYED**.
+- Scope: in-memory resize cap (2,000 px), JPEG quality 0.82, smaller-output
+  guard, cancellation/session fencing and FileReader fallback.
+- Evidence: 11/11 focused privacy/image tests pass; sample receipt conversion
+  measured 81.9% smaller at unchanged 1,086x1,448 dimensions.
+- Gate: run browser/device OCR recall and latency smoke before committing or
+  promoting; do not alter PayOS, schema or provider secrets.
 OCR recovery status: COMPLETE - DEPLOYED AND VERIFIED.
 Next task: monitor OCR quality/latency and schedule the separate React Router upgrade.
 

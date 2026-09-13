@@ -24,6 +24,8 @@ export interface AIConfig {
   qwenBaseUrl?: string;
   /** Shared Qwen model for multimodal, chat, and ranking requests. */
   qwenModel?: string;
+  /** Provider timeout; vision OCR can take longer than short text requests. */
+  qwenRequestTimeoutMs?: number;
   zaiApiKey?: string;
   zaiBaseUrl?: string;
   /** Enable GLM only as an explicit future fallback. */

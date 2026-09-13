@@ -24,7 +24,7 @@ interface NativeBinding {
 
 /** Build a bounded explanation transport without exposing provider details. */
 export function createExplanationTransport(env: Pick<Env,
-  | 'AI' | 'AI_MOCK_MODE' | 'QWEN_API_KEY' | 'QWEN_BASE_URL' | 'QWEN_MODEL'
+  | 'AI' | 'AI_MOCK_MODE' | 'QWEN_API_KEY' | 'QWEN_BASE_URL' | 'QWEN_MODEL' | 'QWEN_REQUEST_TIMEOUT_MS'
   | 'GROQ_API_KEY' | 'GROQ_BASE_URL' | 'GROQ_VISION_MODEL' | 'GROQ_FALLBACK_ENABLED'
   | 'CLOUDFLARE_VISION_FALLBACK' | 'ZAI_API_KEY' | 'ZAI_BASE_URL'
   | 'GLM_FALLBACK_ENABLED' | 'DEEPSEEK_API_KEY' | 'DEEPSEEK_BASE_URL'
@@ -40,6 +40,7 @@ export function createExplanationTransport(env: Pick<Env,
       qwenApiKey: env.QWEN_API_KEY,
       qwenBaseUrl: env.QWEN_BASE_URL,
       qwenModel: env.QWEN_MODEL,
+      qwenRequestTimeoutMs: Number(env.QWEN_REQUEST_TIMEOUT_MS) || undefined,
       groqApiKey: env.GROQ_API_KEY,
       groqBaseUrl: env.GROQ_BASE_URL,
       groqVisionModel: env.GROQ_VISION_MODEL,

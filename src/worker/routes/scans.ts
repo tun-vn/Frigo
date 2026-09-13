@@ -316,6 +316,7 @@ function getAIRouter(env: Env) {
     qwenApiKey: env.QWEN_API_KEY,
     qwenBaseUrl: env.QWEN_BASE_URL,
     qwenModel: env.QWEN_MODEL,
+    qwenRequestTimeoutMs: Number(env.QWEN_REQUEST_TIMEOUT_MS) || undefined,
     groqApiKey: env.GROQ_API_KEY,
     groqBaseUrl: env.GROQ_BASE_URL,
     groqVisionModel: env.GROQ_VISION_MODEL,
@@ -700,7 +701,7 @@ scanRoutes.post('/scans/fridge', async (c) => {
     const aiRouter = getAIRouter(c.env);
     visionResult = await withScanTimeout(
       aiRouter.vision({ imageBase64OrUrl: image.dataUrl, mimeType: image.mimeType }),
-      25_000,
+      75_000,
       'Phân tích ảnh quá lâu. Vui lòng thử lại.',
     );
   } catch (error) {
@@ -910,7 +911,7 @@ scanRoutes.post('/scans/receipt', async (c) => {
     const aiRouter = getAIRouter(c.env);
     receiptResult = await withScanTimeout(
       aiRouter.receiptScan({ imageBase64OrUrl: image.dataUrl, mimeType: image.mimeType }),
-      25_000,
+      75_000,
       'Đọc hóa đơn quá lâu. Vui lòng thử lại.',
     );
   } catch (error) {

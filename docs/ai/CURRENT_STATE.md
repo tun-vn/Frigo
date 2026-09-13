@@ -212,3 +212,20 @@ deployment above; rollback is code-only to a schema-compatible SHA.
 The deployed receipt is anchored to main SHA
 `d1b06732f8a80db4e77986df31ff28d9f04641fa`; the pre-cleanup main head is
 `41d2de6bc76331322cc63e8038432b0b02f60da1`.
+
+## OCR image payload optimization (2026-09-13)
+
+- Local candidate `src/web/lib/private-image.ts` now decodes gallery images in
+  memory, caps the longest side at 2,000 px, and emits JPEG quality `0.82` only
+  when the derivative is smaller; small images are never upscaled.
+- The original `File` is not modified or persisted. Private-session fencing and
+  cancellation cover the async bitmap/canvas path; unsupported browsers fall
+  back to the existing `FileReader` data URL flow.
+- The attached 1,086x1,448 receipt measured 2,116,353 bytes as PNG. A local
+  JPEG quality-0.82 conversion measured 382,334 bytes (81.9% reduction) without
+  changing pixel dimensions. Provider OCR recall has not yet been re-run on the
+  browser-generated derivative.
+- Regression coverage: `tests/unit/scan-privacy.test.tsx` now has 11 passing
+  tests, including resize, no-upscale and cancellation cases.
+- Status: **UNCOMMITTED / NOT DEPLOYED**. Next action is device/browser OCR
+  smoke with the attached receipt, then commit and run the full release gates.

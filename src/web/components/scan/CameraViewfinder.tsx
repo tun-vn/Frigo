@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, RefreshCw, Zap, ZapOff, Image as ImageIcon } from 'lucide-react';
 import { clsx } from 'clsx';
+import { PRIVATE_IMAGE_JPEG_QUALITY, PRIVATE_IMAGE_MAX_DIMENSION } from '../../lib/private-image';
 
 interface CameraViewfinderProps {
   onCapture: (base64: string) => void;
@@ -91,12 +92,15 @@ export const CameraViewfinder: React.FC<CameraViewfinderProps> = ({
   const handleCapture = () => {
     if (videoRef.current && videoRef.current.videoWidth > 0) {
       const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      const sourceWidth = videoRef.current.videoWidth;
+      const sourceHeight = videoRef.current.videoHeight;
+      const scale = Math.min(1, PRIVATE_IMAGE_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', PRIVATE_IMAGE_JPEG_QUALITY);
         onCapture(dataUrl);
         return;
       }

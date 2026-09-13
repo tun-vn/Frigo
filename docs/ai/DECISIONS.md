@@ -41,6 +41,11 @@ authoritative. Candidate model access, provider licensing, exact-SHA CI, canary
 health and readiness must be verified before release. OCR output still requires
 human review/confirmation and does not create trusted retail offers.
 
+The initial 20-25 second timeout was insufficient for full-page receipt OCR: a
+production-sized Vietnamese receipt took about 51 seconds in a non-PII Qwen
+smoke. The candidate therefore uses a 60 second Qwen request timeout and a 75
+second Worker/queue guard, while retaining the existing 10 minute queue lease.
+
 **Alternatives considered:** Retrying every provider error, silently falling back
 to mock fixtures in production, or treating any syntactically valid OCR line as
 usable. Rejected because retries cannot fix permanent provider/configuration
@@ -570,3 +575,25 @@ utility delta, above-neutral aggregate fit, and an above-neutral fully qualified
 soft target covering the current meal. Empty future periods cannot justify it.
 This corrects the generated-only result contract before T05 integration; no persisted
 consumer, schema, allocation, scoring formula or search policy changes.
+
+## ADR-020 — Browser-side image normalization for OCR payloads
+
+**Status:** Proposed maintenance change, local-only on 2026-09-13.
+
+**Decision:** Normalize gallery images before upload using `createImageBitmap` and
+an in-memory canvas. Cap the longest side at 2,000 px, encode as JPEG at quality
+0.82, and only use the derivative when it is smaller than the source. Do not
+upscale small images, mutate the original file, persist image bytes, or log image
+content. If bitmap/canvas APIs are unavailable or fail, retain the existing
+`FileReader` path. Cancellation and private-session fencing apply across decode,
+compression and read stages.
+
+**Rationale:** The sample receipt is 1,086x1,448 PNG and approximately 2.1 MB;
+JPEG quality 0.82 produces approximately 382 KB (81.9% smaller) at the same
+dimensions, reducing request transfer/base64 and provider input overhead while
+retaining the text-bearing pixels. This complements, but does not replace, the
+server/provider timeout recovery already deployed.
+
+**Release boundary:** No production deployment, schema, storage, auth, payment
+or provider configuration change is implied. Promote only after browser/device
+OCR smoke confirms item recall and latency against the attached receipt.

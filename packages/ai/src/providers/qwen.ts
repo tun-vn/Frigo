@@ -18,7 +18,8 @@ import { findCanonicalIngredient } from '@frigo/domain';
 
 const DEFAULT_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
 const DEFAULT_MODEL = 'qwen3.7-flash';
-const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+// Vision extraction can legitimately take ~50s on a full-page receipt.
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
 type ChatMessageContent = string | Array<{
   type?: string;

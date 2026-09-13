@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SqliteD1 } from '../helpers/sqlite-d1';
-import { processScanJob, type ScanQueueMessage } from '../../src/worker/services/scan-queue';
+import { processScanJob, SCAN_AI_TIMEOUT_MS, type ScanQueueMessage } from '../../src/worker/services/scan-queue';
 import type { Env } from '../../src/worker/types';
 
 const vision = vi.hoisted(() => vi.fn());
@@ -90,7 +90,7 @@ describe('scan queue provider retry policy', () => {
       vision.mockImplementationOnce(() => new Promise(() => {}));
       const pending = processScanJob(env, message).catch((error) => error);
 
-      await vi.advanceTimersByTimeAsync(25_000);
+      await vi.advanceTimersByTimeAsync(SCAN_AI_TIMEOUT_MS);
       await expect(pending).resolves.toMatchObject({ code: 'REQUEST_TIMEOUT', retryable: true });
       expect(db.query('SELECT status, error_code FROM scan_queue_jobs')).toEqual([{
         status: 'pending',
