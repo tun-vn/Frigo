@@ -120,11 +120,13 @@ modify canonical `main` or deploy production.
 Application implementation/publication SHA:
 `f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`. The remote branch verification
 passed before this documentation checkpoint; no force push was used.
+The final pre-documentation branch head, including the scheduler-failure
+regression test, is `a145ef5`.
 
 The targeted OCR capability, Singapore pricing, shadow lifecycle and vision
 budget hardening is implemented without changing routing taxonomy, retry limits,
 Qwen-only fail-closed composition or inventory mutation boundaries. Focused
-regressions pass **133 tests / 8 files** and full `pnpm check` passes **1,622
+regressions pass **134 tests / 8 files** and full `pnpm check` passes **1,623
 tests / 95 files** with lint, typecheck, migration replay and production build.
 Offline `pnpm ai:eval -- --dry-run` and `git diff --check` pass. `pnpm audit
 --prod` remains a known failure with two moderate React Router advisories;

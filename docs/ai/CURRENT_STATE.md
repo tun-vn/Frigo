@@ -274,6 +274,8 @@ The deployed receipt is anchored to main SHA
 ## Qwen pre-unification hardening (2026-09-13)
 
 - Application implementation/publication SHA: `f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`.
+- Final pre-documentation branch head (including the scheduler-failure
+  regression test) is `a145ef5`; the docs checkpoint is a subsequent commit.
 - The normal push was verified against `github-frigo/feat/qwen-ai-runtime-cost-router`
   at that SHA; this documentation checkpoint is a subsequent local commit.
 - OCR capability metadata is centralized in `packages/ai/src/model-governance.ts`.
@@ -295,8 +297,8 @@ The deployed receipt is anchored to main SHA
   `backgroundExecutor` (`ExecutionContext.waitUntil` in HTTP routes); queue and
   other hosts without an executor skip shadow safely. Scheduler invocation
   failures are isolated so the primary response remains successful.
-- Focused regression command: **133 tests / 8 files PASS**. Full `pnpm check`:
-  **1,622 tests / 95 files PASS**, lint/typecheck/migration replay/build PASS.
+- Focused regression command: **134 tests / 8 files PASS**. Full `pnpm check`:
+  **1,623 tests / 95 files PASS**, lint/typecheck/migration replay/build PASS.
   `pnpm ai:eval -- --dry-run` and `git diff --check` PASS. `pnpm audit --prod`
   remains FAIL with the two pre-existing moderate React Router advisories
   (patched upstream at `>=7.18.0`); no dependency upgrade was made.

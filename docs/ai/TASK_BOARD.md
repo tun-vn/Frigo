@@ -197,6 +197,8 @@ rolling `qwen3.7-flash` alias is canary-only.
 
 - Application implementation/publication SHA: `f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`;
   remote branch verification passed before this documentation checkpoint.
+- Final pre-documentation branch head (including the scheduler-failure
+  regression test) is `a145ef5`; this documentation checkpoint follows it.
 - **OCR capability:** centralized model capabilities prevent unsupported
   `response_format`/`enable_thinking` on rolling `qwen-vl-ocr`; OCR remains
   prompt-JSON plus application parsing, normalization, Zod and quality gates.
@@ -211,8 +213,8 @@ rolling `qwen3.7-flash` alias is canary-only.
   pass `executionCtx.waitUntil`; queue processing safely skips shadow without an
   executor. Shadow remains off by default and retains budget reservation;
   scheduler invocation failures cannot fail the primary response.
-- **Evidence:** focused **133/133 tests across 8 files PASS**; full
-  `pnpm check` **1,622 tests / 95 files PASS** with lint/typecheck/migrations/
+- **Evidence:** focused **134/134 tests across 8 files PASS**; full
+  `pnpm check` **1,623 tests / 95 files PASS** with lint/typecheck/migrations/
   build green; offline AI eval and diff check pass. `pnpm audit --prod` still
   reports the two known moderate React Router advisories.
 - **Boundary:** canonical `main` and production are unchanged; no live Qwen

@@ -356,6 +356,8 @@ production. The final changes are:
 The verified application publication commit is
 `f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`; the docs checkpoint containing
 this handoff is intentionally a subsequent normal commit.
+The final pre-documentation branch head, including the scheduler-failure
+regression test, is `a145ef5`.
 
 - `qwen-vl-ocr` capability metadata disables unsupported provider structured
   output and thinking controls while preserving prompt JSON, application parsing,
@@ -374,8 +376,8 @@ this handoff is intentionally a subsequent normal commit.
 
 Verification completed 2026-09-13:
 
-- Focused command: **133 tests / 8 files PASS**.
-- `pnpm check`: **1,622 tests / 95 files PASS**; lint, typecheck, migration
+- Focused command: **134 tests / 8 files PASS**.
+- `pnpm check`: **1,623 tests / 95 files PASS**; lint, typecheck, migration
   replay and production build PASS.
 - `pnpm ai:eval -- --dry-run`: PASS, six fixture cases, no live request.
 - `git diff --check`: PASS.
