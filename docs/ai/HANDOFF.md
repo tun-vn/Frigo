@@ -200,6 +200,11 @@ The OCR recovery candidate is not included in that deployment. Production still
 reports the recorded `d1b06732` application receipt and Worker version until a
 new exact-SHA deployment/readiness receipt is independently captured.
 
+Wrangler is not authenticated in the local checkout. The OAuth login URL was
+opened by `npx wrangler login`, but browser automation was unavailable, so the
+operator must complete the Cloudflare authorization in Chrome before any remote
+migration, secret update or deploy command can run.
+
 PRODUCTION LOCAL RECONCILIATION COMPLETE - SCHEMA/CODE CUTOVER VERIFIED
 
 Production local reconciliation: COMPLETE - post-cutover checks passed

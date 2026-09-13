@@ -169,6 +169,9 @@ changing the production receipt above:
   files). Authorized live non-PII Qwen smoke, migration `0023` production apply,
   readiness and canary evidence remain **PENDING**; do not infer production
   readiness from CI alone.
+- Wrangler OAuth is currently unauthenticated on the local machine. `wrangler
+  login` opened the Cloudflare authorization URL, but the desktop browser bridge
+  was unavailable; no deployment or remote migration was attempted.
 
 ## PR #8 metadata
 
