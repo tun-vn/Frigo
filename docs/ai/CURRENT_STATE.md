@@ -273,7 +273,7 @@ The deployed receipt is anchored to main SHA
 
 ## Qwen pre-unification hardening (2026-09-13)
 
-- Application implementation/publication SHA: `a1e54f6decad65b0f8a25867f767f929013c3758`.
+- Application implementation/publication SHA: `f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`.
 - The normal push was verified against `github-frigo/feat/qwen-ai-runtime-cost-router`
   at that SHA; this documentation checkpoint is a subsequent local commit.
 - OCR capability metadata is centralized in `packages/ai/src/model-governance.ts`.
@@ -293,7 +293,8 @@ The deployed receipt is anchored to main SHA
 - Shadow canary remains `AI_SHADOW_CANARY_PERCENT=0` by default. When enabled,
   it reserves call/token budget and is scheduled only through the optional
   `backgroundExecutor` (`ExecutionContext.waitUntil` in HTTP routes); queue and
-  other hosts without an executor skip shadow safely.
+  other hosts without an executor skip shadow safely. Scheduler invocation
+  failures are isolated so the primary response remains successful.
 - Focused regression command: **133 tests / 8 files PASS**. Full `pnpm check`:
   **1,622 tests / 95 files PASS**, lint/typecheck/migration replay/build PASS.
   `pnpm ai:eval -- --dry-run` and `git diff --check` PASS. `pnpm audit --prod`

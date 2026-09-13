@@ -354,7 +354,7 @@ ahead of canonical `github-frigo/main` at `05423f2` without changing `main` or
 production. The final changes are:
 
 The verified application publication commit is
-`a1e54f6decad65b0f8a25867f767f929013c3758`; the docs checkpoint containing
+`f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`; the docs checkpoint containing
 this handoff is intentionally a subsequent normal commit.
 
 - `qwen-vl-ocr` capability metadata disables unsupported provider structured
@@ -369,7 +369,8 @@ this handoff is intentionally a subsequent normal commit.
   estimate before any Qwen provider call; remote URLs remain upstream-limited.
 - Shadow canary is lifecycle-safe: `backgroundExecutor` schedules the reserved
   promise through Worker `executionCtx.waitUntil`; hosts without an executor
-  skip shadow. The default canary percentage remains zero.
+  skip shadow. The default canary percentage remains zero, and scheduler
+  invocation failures are isolated from successful primary responses.
 
 Verification completed 2026-09-13:
 

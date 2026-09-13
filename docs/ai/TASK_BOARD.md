@@ -195,7 +195,7 @@ rolling `qwen3.7-flash` alias is canary-only.
 
 ## Qwen pre-unification hardening checkpoint (2026-09-13)
 
-- Application implementation/publication SHA: `a1e54f6decad65b0f8a25867f767f929013c3758`;
+- Application implementation/publication SHA: `f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`;
   remote branch verification passed before this documentation checkpoint.
 - **OCR capability:** centralized model capabilities prevent unsupported
   `response_format`/`enable_thinking` on rolling `qwen-vl-ocr`; OCR remains
@@ -209,7 +209,8 @@ rolling `qwen3.7-flash` alias is canary-only.
   upstream storage/upload responsibility.
 - **Shadow lifecycle:** `backgroundExecutor` is optional and Worker HTTP routes
   pass `executionCtx.waitUntil`; queue processing safely skips shadow without an
-  executor. Shadow remains off by default and retains budget reservation.
+  executor. Shadow remains off by default and retains budget reservation;
+  scheduler invocation failures cannot fail the primary response.
 - **Evidence:** focused **133/133 tests across 8 files PASS**; full
   `pnpm check` **1,622 tests / 95 files PASS** with lint/typecheck/migrations/
   build green; offline AI eval and diff check pass. `pnpm audit --prod` still

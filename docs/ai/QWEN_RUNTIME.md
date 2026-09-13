@@ -65,7 +65,8 @@ The rolling `qwen3.7-flash` alias is exposed only as
 - Shadow canary is disabled by default. If enabled, it counts against operation
   budgets and is scheduled through an optional host `backgroundExecutor`; Worker
   HTTP routes use `ExecutionContext.waitUntil`, while queue processing skips it
-  when no executor is available.
+  when no executor is available. Scheduler invocation failures are isolated from
+  successful primary responses.
 
 Prices are estimates held in `model-governance.ts`, versioned in telemetry and
 overrideable with `AI_PRICE_*` variables. They are not a billing source of
@@ -117,7 +118,7 @@ modify canonical `main` or deploy production.
 ## Pre-unification hardening receipt (2026-09-13)
 
 Application implementation/publication SHA:
-`a1e54f6decad65b0f8a25867f767f929013c3758`. The remote branch verification
+`f8468eaa7d7fed3cbcf5ac7e780eca07ad3d71e4`. The remote branch verification
 passed before this documentation checkpoint; no force push was used.
 
 The targeted OCR capability, Singapore pricing, shadow lifecycle and vision
