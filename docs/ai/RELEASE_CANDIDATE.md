@@ -80,14 +80,16 @@ remains the optional text/ranking fallback when
 extension path when `GLM_FALLBACK_ENABLED=true`. GLM-5.3 Flash is
 future model work, not an active production setting. Full local candidate gates
 passed on 2026-09-13 (1,579 tests / 93 files, lint, typecheck, migration replay
-and build); hosted PR #17 CI run `34728606704` is green. Live non-PII smoke,
-readiness and canary evidence are still required before release.
-A read-only probe of the supplied test credential against `https://api.b.ai/v1/models`
-returned HTTP 401 (`Invalid token`); the credential was not persisted.
+and build); hosted PR #17 CI run `34728606704` is green. Live non-PII Qwen smoke,
+production migration, deployment and readiness are verified.
+A direct non-PII smoke against DashScope returned HTTP 200 with
+`qwen3.7-flash`; the secret value was stored only in Cloudflare Secret Store.
 
 The candidate adds `0023_scan_request_fingerprint.sql` for durable scan replay
 identity. Local candidate checks must cover migrations `0001`-`0023`; production
-D1 remains at `0022` until the migration is explicitly applied during release.
+D1 migration `0023` was applied remotely on 2026-09-13 after a retained
+pre-0023 export; Worker version `df7225c9-6f20-4206-9f16-573de6a69c43` serves
+100% traffic.
 
 ## Production
 
@@ -181,7 +183,7 @@ NO APPLICATION CHANGE. PayOS/payment code untouched. No real payment performed.
 
 ## Next task
 
-Next task: COMPLETE OCR RECOVERY VALIDATION BEFORE GUARDED DEPLOYMENT
+Next task: MONITOR OCR QUALITY/LATENCY AND SCHEDULE REACT ROUTER UPGRADE
 
 Keep the deployed Worker and planner flags at safe defaults while the OCR
 candidate is validated. Run focused provider/queue/UI tests and all required

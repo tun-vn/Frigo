@@ -19,24 +19,22 @@
 - Main Integration: **COMPLETE**
 - Main CI: **PASS**
 - Production reconciliation: **COMPLETE - SCHEMA AND WORKER CUTOVER VERIFIED** (2026-09-10).
-- OCR production recovery: **IN PROGRESS - CANDIDATE NOT DEPLOYED** (2026-09-12).
+- OCR production recovery: **COMPLETE - DEPLOYED AND VERIFIED** (2026-09-13).
 
 ## Authoritative source
 
 - GitHub source of truth: main.
-- Deployed application SHA: `d1b06732f8a80db4e77986df31ff28d9f04641fa`.
+- Deployed application SHA: `bdb0dda0b1123c4fd940058091e3cb285d5e8eb8`.
 - Commits after the deployed application are documentation-only receipt merges;
   verify the current `main` head from GitHub when preparing a later release.
 - Current `github-frigo/main` observed 2026-09-12: `db2377fd9f63d1be38ce3882c6d8173e0bf9e497`.
 - GitHub API redirects `vn-2c/Frigo` to canonical public repository
   `Tungjpstore/Frigo`; the configured `github-frigo` remote remains the alias.
 - OCR recovery branch: `codex/ocr-production-recovery`, based at `d8ca112a5ac5eb215f36a3f89b4218e2fc691371`;
-  candidate implementation is committed at `ec87aec` with documentation
-  checkpoint `56968ba`; it is not present in the deployed application.
-- At the 2026-09-12 audit, the remote `main` tree was source-equivalent to
-  `d8ca112`; its two commits ahead of the local branch were documentation-only
-  merge commits. Do not treat the OCR branch (or a later local docs commit) as
-  a GitHub or production release without a new receipt.
+  candidate implementation is committed at `ec87aec` and deployed through
+  merge commit `bdb0dda0b1123c4fd940058091e3cb285d5e8eb8`.
+- The 2026-09-13 PR #17 merge added the OCR recovery implementation to `main`;
+  production now reports the merge SHA and Worker version recorded below.
 - PRODUCTION_APPLICATION_BASE_SHA:
   `23ef51d6ec12a5a3e319a2d941dca39d2775cb9d`.
 - PRE_CLEANUP_MAIN_HEAD: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
@@ -45,8 +43,9 @@
 - Verified release head: `0420807968538f61b669569d064c404f67032174`.
 - Main head before this correction: `41d2de6bc76331322cc63e8038432b0b02f60da1`.
 - The main merge tree is source-equivalent to the verified release head.
-- Every change after the application base in GitHub `main` is documentation-only;
-  the OCR recovery candidate is a feature-branch exception.
+- Changes after the historical application base now include the merged OCR
+  recovery implementation and its additive migration; the production receipt
+  is anchored to `bdb0dda0…`.
 
 ## Verification snapshot
 
@@ -71,18 +70,18 @@ schema/Week checks are recorded in the receipt below.
 - Previous docs-cleanup deploy workflow `34405457796`: **SUCCESS**.
 - Release packaging completed.
 - Staging was not provisioned; no staging deployment occurred.
-- Production DB migration: **COMPLETE** - D1 `frigo-db` ledger contains exactly `0001` through `0022`; `0019` -> `0022` were applied in order before the Worker cutover.
-- Production deployment: **COMPLETE** - Worker deployed directly with Wrangler OAuth from clean SHA `d1b06732f8a80db4e77986df31ff28d9f04641fa` because the GitHub production environment/secrets are not provisioned.
+- Production DB migration: **COMPLETE** - D1 `frigo-db` ledger contains exactly `0001` through `0023`; `0023` was applied additively on 2026-09-13 after the retained backup.
+- Production deployment: **COMPLETE** - Worker deployed with Wrangler OAuth from candidate SHA `bdb0dda0b1123c4fd940058091e3cb285d5e8eb8`.
 - Production reconciliation: **COMPLETE** - post-cutover source, schema, health and traffic checks passed.
-- Active deployment: Cloudflare version `48e0c366-3c8a-4f2b-a2d5-965785995431`, 100% traffic, deployed 2026-09-10T21:08:00Z.
-- OCR recovery candidate: **NOT DEPLOYED**. No remote migration, production
-  deploy, secret change or live-provider smoke was performed for this candidate;
-  the deployed source SHA still predates the typed provider/quality-gate changes.
+- Active deployment: Cloudflare version `df7225c9-6f20-4206-9f16-573de6a69c43`, 100% traffic, deployed 2026-09-13T01:01:24Z.
+- OCR recovery: **DEPLOYED AND VERIFIED**. Remote D1 `0023` is applied and gated;
+  Qwen secret and non-PII smoke passed; readiness reports commit `bdb0dda0…`.
 - Planner rollout: NOT STARTED.
-- No production secrets were changed; existing secret names include `JWT_SECRET`,
+- Production secret `QWEN_API_KEY` was added from the operator clipboard; its
+  value is never stored in the repository or logs. Existing secret names include
+  `JWT_SECRET`,
   `OTP_HASH_SECRET`, `TURNSTILE_SECRET_KEY`, `QWEN_API_KEY` and optional
-  `GROQ_API_KEY`. The user-supplied test credential was not written to the
-  repository or production.
+  `GROQ_API_KEY`. The Qwen key value is not written to the repository or logs.
 
 ## Production cutover receipt (2026-09-10)
 
@@ -114,8 +113,9 @@ The candidate addresses provider/model recovery and scan failure handling withou
 changing the production receipt above:
 
 - Candidate schema now includes additive migration `0023_scan_request_fingerprint.sql`;
-  local replay and schema checks must cover `0001`-`0023`. Production D1 remains
-  at `0022` until this migration is explicitly applied during the guarded release.
+  local replay and schema checks cover `0001`-`0023`. Production D1 migration
+  `0023` was applied after backup `.artifacts/frigo-db-pre-ocr-20260913T005253Z.sql`
+  (SHA-256 `bc62e5844c6a838a3b1b98d29dffa39c9d6cf6e1d570617e843c9e3e820bb088`).
 
 - Qwen `qwen3.7-flash` is the primary provider for vision, receipt OCR, chat and
   recipe ranking through the DashScope international OpenAI-compatible endpoint
@@ -140,11 +140,10 @@ changing the production receipt above:
   provider/recovery, queue, quota, scan-route and UI tests PASS. The complete
   candidate `pnpm check` gate is green: 1,579 tests / 93 files PASS, lint,
   typecheck, migration replay through `0023` and production build all PASS.
-- Live provider access is **NOT VERIFIED**. A read-only probe of the supplied
-  test credential against `https://api.b.ai/v1/models` returned HTTP 401
-  (`Invalid token`); the credential was not persisted or echoed in repository
-  files. No production readiness, hosted CI, live smoke or canary result is
-  claimed by this checkpoint.
+- Live provider access is **VERIFIED**: non-PII chat smoke returned HTTP 200 from
+  DashScope with model `qwen3.7-flash` and response `OK`. Production readiness
+  returned HTTP 200 with `ai=configured`, database/queue `ok`, and only the
+  existing non-blocking `CONFIG_PLUS_GRANT_SECRET_MISSING` warning.
 
 ## Verification commands
 
@@ -166,12 +165,10 @@ changing the production receipt above:
 - `git diff --check`: PASS for this documentation checkpoint.
 - OCR candidate local lint/typecheck/test/build/migration checks: **PASS** on
   2026-09-13. Hosted PR #17 CI run `34728606704` also passed (1,579 tests / 93
-  files). Authorized live non-PII Qwen smoke, migration `0023` production apply,
-  readiness and canary evidence remain **PENDING**; do not infer production
-  readiness from CI alone.
-- Wrangler OAuth is currently unauthenticated on the local machine. `wrangler
-  login` opened the Cloudflare authorization URL, but the desktop browser bridge
-  was unavailable; no deployment or remote migration was attempted.
+  files). Live non-PII Qwen smoke, migration `0023`, deployment and readiness
+  evidence are verified; only the non-blocking Plus Grant warning remains.
+- Wrangler OAuth is authenticated as `tungbipdz@gmail.com` (account
+  `ef250a88911fd24073cb73d1c07e0218`).
 
 ## PR #8 metadata
 
@@ -200,7 +197,7 @@ No real payment performed.
 
 ## Next task
 
-Next task: COMPLETE OCR PRODUCTION-RECOVERY VALIDATION BEFORE DEPLOYMENT
+Next task: MONITOR OCR QUALITY/LATENCY AND SCHEDULE REACT ROUTER UPGRADE
 
 Keep the deployed Worker and planner flags at their safe defaults while the OCR
 candidate is validated. Run the focused provider/queue/UI tests, all required
