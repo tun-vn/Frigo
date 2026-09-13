@@ -116,6 +116,10 @@ modify canonical `main` or deploy production.
 
 ## Pre-unification hardening receipt (2026-09-13)
 
+Application implementation/publication SHA:
+`a1e54f6decad65b0f8a25867f767f929013c3758`. The remote branch verification
+passed before this documentation checkpoint; no force push was used.
+
 The targeted OCR capability, Singapore pricing, shadow lifecycle and vision
 budget hardening is implemented without changing routing taxonomy, retry limits,
 Qwen-only fail-closed composition or inventory mutation boundaries. Focused

@@ -273,6 +273,9 @@ The deployed receipt is anchored to main SHA
 
 ## Qwen pre-unification hardening (2026-09-13)
 
+- Application implementation/publication SHA: `a1e54f6decad65b0f8a25867f767f929013c3758`.
+- The normal push was verified against `github-frigo/feat/qwen-ai-runtime-cost-router`
+  at that SHA; this documentation checkpoint is a subsequent local commit.
 - OCR capability metadata is centralized in `packages/ai/src/model-governance.ts`.
   `qwen-vl-ocr` is treated as a rolling alias (`pinned=false`), omits both
   provider `response_format` and `enable_thinking`, and continues application

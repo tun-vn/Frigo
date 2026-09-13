@@ -353,6 +353,10 @@ Implementation is complete on `feat/qwen-ai-runtime-cost-router` and remains
 ahead of canonical `github-frigo/main` at `05423f2` without changing `main` or
 production. The final changes are:
 
+The verified application publication commit is
+`a1e54f6decad65b0f8a25867f767f929013c3758`; the docs checkpoint containing
+this handoff is intentionally a subsequent normal commit.
+
 - `qwen-vl-ocr` capability metadata disables unsupported provider structured
   output and thinking controls while preserving prompt JSON, application parsing,
   normalization, Zod validation and scan quality gates. The rolling alias is

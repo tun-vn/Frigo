@@ -195,6 +195,8 @@ rolling `qwen3.7-flash` alias is canary-only.
 
 ## Qwen pre-unification hardening checkpoint (2026-09-13)
 
+- Application implementation/publication SHA: `a1e54f6decad65b0f8a25867f767f929013c3758`;
+  remote branch verification passed before this documentation checkpoint.
 - **OCR capability:** centralized model capabilities prevent unsupported
   `response_format`/`enable_thinking` on rolling `qwen-vl-ocr`; OCR remains
   prompt-JSON plus application parsing, normalization, Zod and quality gates.
