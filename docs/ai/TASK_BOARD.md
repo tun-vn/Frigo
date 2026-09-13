@@ -208,8 +208,8 @@ rolling `qwen3.7-flash` alias is canary-only.
 - **Shadow lifecycle:** `backgroundExecutor` is optional and Worker HTTP routes
   pass `executionCtx.waitUntil`; queue processing safely skips shadow without an
   executor. Shadow remains off by default and retains budget reservation.
-- **Evidence:** focused **132/132 tests across 8 files PASS**; full
-  `pnpm check` **1,619 tests / 95 files PASS** with lint/typecheck/migrations/
+- **Evidence:** focused **133/133 tests across 8 files PASS**; full
+  `pnpm check` **1,622 tests / 95 files PASS** with lint/typecheck/migrations/
   build green; offline AI eval and diff check pass. `pnpm audit --prod` still
   reports the two known moderate React Router advisories.
 - **Boundary:** canonical `main` and production are unchanged; no live Qwen

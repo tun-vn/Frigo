@@ -119,7 +119,7 @@ modify canonical `main` or deploy production.
 The targeted OCR capability, Singapore pricing, shadow lifecycle and vision
 budget hardening is implemented without changing routing taxonomy, retry limits,
 Qwen-only fail-closed composition or inventory mutation boundaries. Focused
-regressions pass **132 tests / 8 files** and full `pnpm check` passes **1,619
+regressions pass **133 tests / 8 files** and full `pnpm check` passes **1,622
 tests / 95 files** with lint, typecheck, migration replay and production build.
 Offline `pnpm ai:eval -- --dry-run` and `git diff --check` pass. `pnpm audit
 --prod` remains a known failure with two moderate React Router advisories;

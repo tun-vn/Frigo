@@ -35,7 +35,7 @@ function scanFailureCode(error: unknown): string {
     return (error as { code: string }).code;
   }
   const message = error instanceof Error ? error.message : String(error);
-  const explicit = message.match(/\b(?:AI_SCAN_[A-Z_]+|AI_BUDGET_EXCEEDED|AI_ESCALATION_EXHAUSTED|AI_UNAVAILABLE|AI_IMAGE_TOO_LARGE|REQUEST_TIMEOUT|NETWORK_ERROR|RATE_LIMITED|UPSTREAM_ERROR|MODEL_NOT_FOUND|AUTHENTICATION_FAILED|PERMISSION_DENIED|LICENSE_REQUIRED|INVALID_RESPONSE|SCHEMA_VALIDATION|IMAGE_NOT_FOUND|IMAGE_UNAVAILABLE)\b/);
+  const explicit = message.match(/\b(?:AI_SCAN_[A-Z_]+|AI_BUDGET_EXCEEDED|AI_ESCALATION_EXHAUSTED|AI_UNAVAILABLE|AI_IMAGE_TOO_LARGE|UNSUPPORTED_REQUEST_OPTION|REQUEST_TIMEOUT|NETWORK_ERROR|RATE_LIMITED|UPSTREAM_ERROR|MODEL_NOT_FOUND|AUTHENTICATION_FAILED|PERMISSION_DENIED|LICENSE_REQUIRED|INVALID_RESPONSE|SCHEMA_VALIDATION|IMAGE_NOT_FOUND|IMAGE_UNAVAILABLE)\b/);
   if (explicit?.[0]) return explicit[0];
   if (/timeout|timed out|abort/i.test(message)) return 'REQUEST_TIMEOUT';
   if (/network|fetch failed|connection reset|econn/i.test(message)) return 'NETWORK_ERROR';
@@ -149,6 +149,7 @@ function publicScanErrorMessage(code: unknown): string | undefined {
     case 'AI_PROVIDER_MODEL_UNAVAILABLE':
     case 'AI_PROVIDER_AUTH':
     case 'AI_PROVIDER_LICENSE':
+    case 'UNSUPPORTED_REQUEST_OPTION':
     case 'MODEL_NOT_FOUND':
     case 'AUTHENTICATION_FAILED':
     case 'PERMISSION_DENIED':
@@ -178,7 +179,7 @@ function scanFailureStatus(code: string): 400 | 413 | 422 | 429 | 500 | 503 | 50
   if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') return 400;
   if (code === 'AI_BUDGET_EXCEEDED') return 422;
   if (code === 'AI_IMAGE_TOO_LARGE') return 413;
-  if (RETRYABLE_SCAN_CODES.has(code) || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
+  if (RETRYABLE_SCAN_CODES.has(code) || code === 'MODEL_NOT_FOUND' || code === 'UNSUPPORTED_REQUEST_OPTION' || code === 'AUTHENTICATION_FAILED' ||
       code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED' || code === 'RESERVATION_EXPIRED') return 503;
   return 500;
 }
@@ -323,7 +324,10 @@ function validateBase64Payload(base64: string, maxBytes = 5 * 1024 * 1024): { va
   // Approximate size in bytes: length * (3/4)
   const estimatedBytes = (base64.length * 3) / 4;
   if (estimatedBytes > maxBytes) {
-    return { valid: false, error: `Dung lượng ảnh vượt quá giới hạn cho phép (tối đa ${Math.round(maxBytes / (1024 * 1024))}MB)` };
+    const limitLabel = maxBytes >= 1024 * 1024
+      ? `${Math.round(maxBytes / (1024 * 1024))}MB`
+      : `${Math.round(maxBytes / 1024)}KiB`;
+    return { valid: false, error: `Dung lượng ảnh vượt quá giới hạn cho phép (tối đa ${limitLabel})` };
   }
   return { valid: true };
 }

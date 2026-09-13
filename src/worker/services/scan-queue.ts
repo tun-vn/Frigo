@@ -113,6 +113,10 @@ export function sanitizedScanErrorMessage(code: string): string {
     case 'INVALID_RESPONSE':
     case 'SCHEMA_VALIDATION':
       return 'Không nhận diện được dữ liệu đủ rõ từ ảnh.';
+    case 'AI_IMAGE_TOO_LARGE':
+      return 'Ảnh bản quét vượt quá giới hạn dung lượng cho phép.';
+    case 'UNSUPPORTED_REQUEST_OPTION':
+      return 'Dịch vụ nhận diện tạm thời không tương thích với model hiện tại.';
     case 'REQUEST_TIMEOUT':
     case 'AI_SCAN_TIMEOUT':
       return 'Dịch vụ nhận diện phản hồi quá lâu.';

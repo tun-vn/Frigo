@@ -369,8 +369,8 @@ production. The final changes are:
 
 Verification completed 2026-09-13:
 
-- Focused command: **132 tests / 8 files PASS**.
-- `pnpm check`: **1,619 tests / 95 files PASS**; lint, typecheck, migration
+- Focused command: **133 tests / 8 files PASS**.
+- `pnpm check`: **1,622 tests / 95 files PASS**; lint, typecheck, migration
   replay and production build PASS.
 - `pnpm ai:eval -- --dry-run`: PASS, six fixture cases, no live request.
 - `git diff --check`: PASS.

@@ -102,6 +102,18 @@ describe('Qwen task runtime governance', () => {
       .toEqual(['qwen-vl-ocr', 'qwen3.8-flash']);
   });
 
+  it('skips the same OCR alias when the provider rejects an unsupported option', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('unsupported parameter response_format', { status: 400 }))
+      .mockResolvedValueOnce(response(receipt));
+    const runtime = new QwenTaskRuntime({ qwenApiKey: 'qwen-key', qwenOnly: true });
+
+    await expect(runtime.generate({ task: 'receipt_ocr', input: { imageBase64OrUrl: 'AQI=' } }))
+      .resolves.toMatchObject({ attempts: 2, physicalModel: 'qwen3.8-flash' });
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).model))
+      .toEqual(['qwen-vl-ocr', 'qwen3.8-flash']);
+  });
+
   it('rejects unparsed structured chat output and omits broad context from repair', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(response('not-json'))

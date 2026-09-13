@@ -304,9 +304,10 @@ export class QwenTaskRuntime {
           const repairable = error.code === 'SCHEMA_VALIDATION'
             || error.code === 'INVALID_RESPONSE'
             || error.code === 'AI_SCAN_NO_USABLE_ITEMS'
-            || error.code === 'MODEL_NOT_FOUND';
+            || error.code === 'MODEL_NOT_FOUND'
+            || error.code === 'UNSUPPORTED_REQUEST_OPTION';
           if (!repairable || index >= roles.length - 1) break;
-          if (error.code === 'MODEL_NOT_FOUND' && roles[index + 1] === role) {
+          if ((error.code === 'MODEL_NOT_FOUND' || error.code === 'UNSUPPORTED_REQUEST_OPTION') && roles[index + 1] === role) {
             // A missing model cannot be repaired by retrying the same model;
             // jump directly to the configured Qwen-only fallback role.
             roles.splice(index + 1, 1);

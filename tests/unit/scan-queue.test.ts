@@ -40,6 +40,8 @@ describe('scan queue AI failure policy', () => {
     ['SCHEMA_VALIDATION', false],
     ['INVALID_RESPONSE', false],
     ['AI_SCAN_NO_USABLE_ITEMS', false],
+    ['AI_IMAGE_TOO_LARGE', false],
+    ['UNSUPPORTED_REQUEST_OPTION', false],
     ['REQUEST_TIMEOUT', true],
     ['NETWORK_ERROR', true],
     ['RATE_LIMITED', true],

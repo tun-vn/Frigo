@@ -140,7 +140,7 @@ describe('QwenProvider', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('unsupported parameter response_format', { status: 400 }));
 
     await expect(new QwenProvider('secret').receiptScan({ imageBase64OrUrl: 'AQI=' })).rejects.toMatchObject({
-      code: 'PROVIDER_REQUEST_REJECTED', retryable: false,
+      code: 'UNSUPPORTED_REQUEST_OPTION', retryable: false,
     });
   });
 });

@@ -291,8 +291,8 @@ The deployed receipt is anchored to main SHA
   it reserves call/token budget and is scheduled only through the optional
   `backgroundExecutor` (`ExecutionContext.waitUntil` in HTTP routes); queue and
   other hosts without an executor skip shadow safely.
-- Focused regression command: **132 tests / 8 files PASS**. Full `pnpm check`:
-  **1,619 tests / 95 files PASS**, lint/typecheck/migration replay/build PASS.
+- Focused regression command: **133 tests / 8 files PASS**. Full `pnpm check`:
+  **1,622 tests / 95 files PASS**, lint/typecheck/migration replay/build PASS.
   `pnpm ai:eval -- --dry-run` and `git diff --check` PASS. `pnpm audit --prod`
   remains FAIL with the two pre-existing moderate React Router advisories
   (patched upstream at `>=7.18.0`); no dependency upgrade was made.

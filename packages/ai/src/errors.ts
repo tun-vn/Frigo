@@ -92,6 +92,8 @@ export function classifyAIHttpCode(status: number, detail = '', provider?: strin
   if (modelUnavailable && (status === 400 || status === 404 || status === 422 || provider?.toLowerCase() === 'qwen')) {
     return 'MODEL_NOT_FOUND';
   }
+  const unsupportedOption = /(unsupported|unknown|invalid)\s+(?:parameter|request option|option)|(?:parameter|request option|option)[\s\S]{0,80}(?:not supported|unsupported)|response_format[\s\S]{0,40}(?:unsupported|not supported)/i.test(normalized);
+  if (unsupportedOption && provider?.toLowerCase() === 'qwen') return 'UNSUPPORTED_REQUEST_OPTION';
   if (qwenNotFound) {
     return 'MODEL_NOT_FOUND';
   }
