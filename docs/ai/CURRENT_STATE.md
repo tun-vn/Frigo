@@ -227,5 +227,6 @@ The deployed receipt is anchored to main SHA
   browser-generated derivative.
 - Regression coverage: `tests/unit/scan-privacy.test.tsx` now has 11 passing
   tests, including resize, no-upscale and cancellation cases.
-- Status: **UNCOMMITTED / NOT DEPLOYED**. Next action is device/browser OCR
-  smoke with the attached receipt, then commit and run the full release gates.
+- Status: **COMMITTED LOCALLY / NOT DEPLOYED** at `ba3d872eea2d677e38f94adb8355f493c4c45852`.
+  Next action is device/browser OCR smoke with the attached receipt, then open
+  the release review for promotion.

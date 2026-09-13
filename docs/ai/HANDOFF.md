@@ -222,8 +222,9 @@ encoded as JPEG quality 0.82 only when smaller than the source. Small images are
 not upscaled; originals are never mutated or stored; cancellation/session fencing
 and a FileReader fallback are preserved. The attached receipt measured 2,116,353
 bytes as PNG versus 382,334 bytes after a local quality-0.82 conversion (81.9%
-reduction, same dimensions). Focused privacy/image tests pass 11/11. This is not
-committed or deployed; browser/device OCR recall and latency smoke is still
+reduction, same dimensions). Focused privacy/image tests pass 11/11. The
+implementation is committed locally at `ba3d872eea2d677e38f94adb8355f493c4c45852`
+but is not deployed; browser/device OCR recall and latency smoke is still
 required before release.
 
 ## PR #8 authoritative metadata
