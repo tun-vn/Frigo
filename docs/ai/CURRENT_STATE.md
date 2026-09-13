@@ -270,3 +270,35 @@ The deployed receipt is anchored to main SHA
   SHA against the local candidate. Canonical `main` remains unchanged at
   `05423f2`; no merge, remote migration or deployment occurred. Next action is
   code review or a separately authorized Qwen benchmark.
+
+## Qwen pre-unification hardening (2026-09-13)
+
+- OCR capability metadata is centralized in `packages/ai/src/model-governance.ts`.
+  `qwen-vl-ocr` is treated as a rolling alias (`pinned=false`), omits both
+  provider `response_format` and `enable_thinking`, and continues application
+  JSON parsing, normalization, Zod validation and quality gates. Supported
+  Qwen multimodal models retain provider JSON mode.
+- Singapore low-context estimates are now versioned as
+  `estimate-2026-09-sg-low-context` for the fast/multimodal/OCR/reasoning tiers;
+  judge remains an explicitly documented planning estimate. Cost telemetry is
+  still estimated and reconstructable from model, token counts, cache counts and
+  pricing version.
+- Vision payloads are rejected before provider inference using decoded base64/data
+  URL byte estimates. Defaults are 5 MiB for `AI_MAX_IMAGE_BYTES` and
+  `AI_MAX_OCR_IMAGE_BYTES`, bounded to 64 KiB-20 MiB; remote URLs remain unknown
+  at this layer and rely on upstream storage/upload limits.
+- Shadow canary remains `AI_SHADOW_CANARY_PERCENT=0` by default. When enabled,
+  it reserves call/token budget and is scheduled only through the optional
+  `backgroundExecutor` (`ExecutionContext.waitUntil` in HTTP routes); queue and
+  other hosts without an executor skip shadow safely.
+- Focused regression command: **132 tests / 8 files PASS**. Full `pnpm check`:
+  **1,619 tests / 95 files PASS**, lint/typecheck/migration replay/build PASS.
+  `pnpm ai:eval -- --dry-run` and `git diff --check` PASS. `pnpm audit --prod`
+  remains FAIL with the two pre-existing moderate React Router advisories
+  (patched upstream at `>=7.18.0`); no dependency upgrade was made.
+- No live Qwen benchmark, production deploy, remote migration, secret change,
+  merge, or PayOS/payment change was performed. T08-T12 Inventory Truth work
+  remains pending U01/U02 and is not imported here.
+- Branch publication target remains `feat/qwen-ai-runtime-cost-router`; verify
+  the final commit SHA with `git ls-remote` after the normal push. Next action:
+  code review, then a separately authorized benchmark/release decision.

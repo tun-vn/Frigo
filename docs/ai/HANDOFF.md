@@ -346,3 +346,39 @@ Next action after publication: request code review or a separately authorized
 Qwen benchmark, then promote a pinned alias only through the documented
 golden-dataset process. Do not merge, migrate remotely or deploy from this
 branch.
+
+## Qwen pre-unification hardening checkpoint (2026-09-13)
+
+Implementation is complete on `feat/qwen-ai-runtime-cost-router` and remains
+ahead of canonical `github-frigo/main` at `05423f2` without changing `main` or
+production. The final changes are:
+
+- `qwen-vl-ocr` capability metadata disables unsupported provider structured
+  output and thinking controls while preserving prompt JSON, application parsing,
+  normalization, Zod validation and scan quality gates. The rolling alias is
+  explicitly `pinned=false`; no unverified snapshot was invented.
+- Pricing defaults now reflect Singapore low-context planning values and carry
+  `estimate-2026-09-sg-low-context` (judge remains a documented planning
+  estimate). Usage remains estimated, not Alibaba invoice truth.
+- `AI_MAX_IMAGE_BYTES` and `AI_MAX_OCR_IMAGE_BYTES` default to 5 MiB and are
+  bounded to 64 KiB-20 MiB. Raw/data-URL base64 is checked by decoded-byte
+  estimate before any Qwen provider call; remote URLs remain upstream-limited.
+- Shadow canary is lifecycle-safe: `backgroundExecutor` schedules the reserved
+  promise through Worker `executionCtx.waitUntil`; hosts without an executor
+  skip shadow. The default canary percentage remains zero.
+
+Verification completed 2026-09-13:
+
+- Focused command: **132 tests / 8 files PASS**.
+- `pnpm check`: **1,619 tests / 95 files PASS**; lint, typecheck, migration
+  replay and production build PASS.
+- `pnpm ai:eval -- --dry-run`: PASS, six fixture cases, no live request.
+- `git diff --check`: PASS.
+- `pnpm audit --prod`: FAIL with two known moderate React Router advisories;
+  patched upstream at `>=7.18.0`, upgrade intentionally deferred.
+
+No live Qwen benchmark, production deploy, remote migration, secret change,
+merge, PayOS/payment modification or T08-T12 Inventory Truth import occurred.
+Queue/HTTP compatibility and inventory mutation boundaries remain intact. The
+next action is to verify the final normal push SHA with `git ls-remote`, obtain
+code review, and only then consider a separately authorized benchmark/release.

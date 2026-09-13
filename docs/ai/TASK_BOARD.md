@@ -192,3 +192,27 @@ rolling `qwen3.7-flash` alias is canary-only.
   the push completed successfully. Next action is code review or a separately
   authorized benchmark. Do not merge, deploy, migrate remotely or alter
   production.
+
+## Qwen pre-unification hardening checkpoint (2026-09-13)
+
+- **OCR capability:** centralized model capabilities prevent unsupported
+  `response_format`/`enable_thinking` on rolling `qwen-vl-ocr`; OCR remains
+  prompt-JSON plus application parsing, normalization, Zod and quality gates.
+- **Pricing:** Singapore low-context estimates are versioned
+  `estimate-2026-09-sg-low-context`; judge pricing is retained only as a
+  planning estimate. `estimatedCostUsd` remains non-authoritative.
+- **Image guard:** decoded raw base64/data URL payloads are rejected before
+  provider calls at 5 MiB defaults (`AI_MAX_IMAGE_BYTES` and
+  `AI_MAX_OCR_IMAGE_BYTES`, bounded 64 KiB-20 MiB). Remote URLs remain an
+  upstream storage/upload responsibility.
+- **Shadow lifecycle:** `backgroundExecutor` is optional and Worker HTTP routes
+  pass `executionCtx.waitUntil`; queue processing safely skips shadow without an
+  executor. Shadow remains off by default and retains budget reservation.
+- **Evidence:** focused **132/132 tests across 8 files PASS**; full
+  `pnpm check` **1,619 tests / 95 files PASS** with lint/typecheck/migrations/
+  build green; offline AI eval and diff check pass. `pnpm audit --prod` still
+  reports the two known moderate React Router advisories.
+- **Boundary:** canonical `main` and production are unchanged; no live Qwen
+  benchmark, deploy, remote migration, secret update, PayOS/payment change or
+  T08-T12 import. T08-T12 remains pending U01/U02. After normal publication,
+  verify the branch SHA and request review before any release action.

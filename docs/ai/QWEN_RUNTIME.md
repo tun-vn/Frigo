@@ -53,6 +53,19 @@ The rolling `qwen3.7-flash` alias is exposed only as
 - Provider usage is recorded without prompts, images, API keys or receipt text;
   the ledger aggregates calls, tokens, estimated cost, latency, failures,
   retries, escalations, OCR failures and planner repairs.
+- Model capability metadata controls optional provider parameters. The rolling
+  `qwen-vl-ocr` alias is `pinned=false`, does not receive `response_format` or
+  `enable_thinking`, and still must pass application JSON parsing, normalization,
+  Zod validation and quality gates. Supported multimodal Qwen models retain
+  provider JSON mode.
+- Vision payloads use `AI_MAX_IMAGE_BYTES` and `AI_MAX_OCR_IMAGE_BYTES` (5 MiB
+  defaults, bounded 64 KiB-20 MiB). Raw/data URL base64 is checked by decoded
+  byte estimate before inference; remote URLs are intentionally unknown here and
+  rely on upstream upload/storage limits.
+- Shadow canary is disabled by default. If enabled, it counts against operation
+  budgets and is scheduled through an optional host `backgroundExecutor`; Worker
+  HTTP routes use `ExecutionContext.waitUntil`, while queue processing skips it
+  when no executor is available.
 
 Prices are estimates held in `model-governance.ts`, versioned in telemetry and
 overrideable with `AI_PRICE_*` variables. They are not a billing source of
@@ -100,3 +113,17 @@ separately reviewed server-side harness and explicit credentials.
 
 This governance change is implemented on the feature branch only; it does not
 modify canonical `main` or deploy production.
+
+## Pre-unification hardening receipt (2026-09-13)
+
+The targeted OCR capability, Singapore pricing, shadow lifecycle and vision
+budget hardening is implemented without changing routing taxonomy, retry limits,
+Qwen-only fail-closed composition or inventory mutation boundaries. Focused
+regressions pass **132 tests / 8 files** and full `pnpm check` passes **1,619
+tests / 95 files** with lint, typecheck, migration replay and production build.
+Offline `pnpm ai:eval -- --dry-run` and `git diff --check` pass. `pnpm audit
+--prod` remains a known failure with two moderate React Router advisories;
+upgrading React Router is separate follow-up work. No live benchmark, merge,
+remote migration, secret update or deployment occurred. T08-T12 Inventory Truth
+remains pending U01/U02. After publication, verify the branch SHA and request
+review before any benchmark or release.
