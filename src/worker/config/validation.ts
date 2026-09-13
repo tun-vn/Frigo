@@ -39,7 +39,9 @@ type VisionCapabilityEnv = Pick<
   Env,
   | 'AI'
   | 'AI_MOCK_MODE'
+  | 'AI_ENABLED'
   | 'QWEN_API_KEY'
+  | 'AI_QWEN_ONLY'
   | 'GROQ_API_KEY'
   | 'GROQ_FALLBACK_ENABLED'
   | 'CLOUDFLARE_VISION_FALLBACK'
@@ -49,9 +51,11 @@ type VisionCapabilityEnv = Pick<
 
 export function getEffectiveVisionProviders(env: VisionCapabilityEnv): EffectiveVisionProvider[] {
   if (env.AI_MOCK_MODE === 'true') return ['mock'];
+  if (env.AI_ENABLED === 'false') return [];
 
   const providers: EffectiveVisionProvider[] = [];
   if (env.QWEN_API_KEY?.trim()) providers.push('qwen');
+  if (env.AI_QWEN_ONLY === 'true') return providers;
   if (env.GROQ_FALLBACK_ENABLED === 'true' && env.GROQ_API_KEY?.trim()) providers.push('groq');
   if (env.CLOUDFLARE_VISION_FALLBACK === 'true' && env.AI) providers.push('cloudflare');
   if (env.GLM_FALLBACK_ENABLED === 'true' && env.ZAI_API_KEY?.trim()) providers.push('glm');
@@ -87,6 +91,10 @@ function isValidQwenModel(value: string): boolean {
   return value.length > 0 && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
+function isQwenModelIdentifier(value: string): boolean {
+  return /^qwen[\w.:-]*$/i.test(value);
+}
+
 export function validateEnvironment(env: Env): ConfigValidationResult {
   const environment = env.ENVIRONMENT || 'development';
   const warnings: ConfigIssue[] = [];
@@ -115,6 +123,14 @@ export function validateEnvironment(env: Env): ConfigValidationResult {
 
   if (env.AI_MOCK_MODE === 'true') {
     fatalIssues.push(fatal('CONFIG_MOCK_MODE_IN_PRODUCTION', 'AI_MOCK_MODE must not be true in production.'));
+  }
+
+  if (env.AI_ENABLED !== undefined && env.AI_ENABLED !== 'true') {
+    fatalIssues.push(fatal('CONFIG_AI_DISABLED_IN_PRODUCTION', 'AI_ENABLED must be true in production; disabling the AI runtime leaves scan and explanation paths unavailable.'));
+  }
+
+  if (env.AI_QWEN_ONLY !== undefined && env.AI_QWEN_ONLY !== 'true') {
+    fatalIssues.push(fatal('CONFIG_QWEN_ONLY_REQUIRED', 'AI_QWEN_ONLY must be true in production; non-Qwen provider routing is disabled.'));
   }
 
   if (env.WEEK_SCHEMA_MODE && env.WEEK_SCHEMA_MODE !== 'dual') {
@@ -171,13 +187,24 @@ export function validateEnvironment(env: Env): ConfigValidationResult {
     );
   }
   if (env.AI_MOCK_MODE !== 'true' && env.QWEN_MODEL !== undefined &&
-      !isValidQwenModel(env.QWEN_MODEL.trim())) {
+      (!isValidQwenModel(env.QWEN_MODEL.trim()) || !isQwenModelIdentifier(env.QWEN_MODEL.trim()))) {
     fatalIssues.push(
       fatal(
         'CONFIG_QWEN_MODEL_INVALID',
         'QWEN_MODEL must be a non-empty model identifier when provided.'
       )
     );
+  }
+  const modelKeys = [
+    'AI_MODEL_FAST', 'AI_MODEL_FAST_CANARY', 'AI_MODEL_MULTIMODAL',
+    'AI_MODEL_OCR', 'AI_MODEL_REASONING', 'AI_MODEL_JUDGE',
+  ] as const;
+  for (const key of modelKeys) {
+    const value = env[key]?.trim();
+    if (env.AI_MOCK_MODE !== 'true' && value !== undefined &&
+        (!isValidQwenModel(value) || !isQwenModelIdentifier(value))) {
+      fatalIssues.push(fatal('CONFIG_AI_MODEL_INVALID', `${key} must be a valid Qwen model identifier in production.`));
+    }
   }
   if (env.AI_MOCK_MODE !== 'true' && env.CLOUDFLARE_VISION_FALLBACK === 'true' && !env.AI) {
     fatalIssues.push(

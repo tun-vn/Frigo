@@ -84,7 +84,7 @@ describe('T07 grounded explanation audit', () => {
     vi.useFakeTimers();
     const run = vi.fn(() => new Promise<never>(() => {}));
     const network = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('external transport forbidden'));
-    const transport = createExplanationTransport({ AI: { run } });
+    const transport = createExplanationTransport({ AI: { run }, AI_QWEN_ONLY: 'false' });
     expect(transport).toBeDefined();
 
     const pending = explainMealReasons({ ...input, transport });

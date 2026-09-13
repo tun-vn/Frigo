@@ -86,7 +86,7 @@ describe('existing AI router/native transport', () => {
   it('uses one bounded native request with structured IDs only, no tools or provider fallback', async () => {
     const run = vi.fn(async () => ({ response: JSON.stringify({ reasonCodes: input.reasonCodes }) }));
     const network = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('External transport forbidden'));
-    const output = await explainMealReasons({ ...input, locale: 'en', transport: createExplanationTransport({ AI: { run } }) });
+    const output = await explainMealReasons({ ...input, locale: 'en', transport: createExplanationTransport({ AI: { run }, AI_QWEN_ONLY: 'false' }) });
     expect(output.source).toBe('ai');
     expect(run).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledWith('@cf/meta/llama-3.1-8b-instruct', {
@@ -101,7 +101,7 @@ describe('existing AI router/native transport', () => {
 
   it('does not mistake friendly legacy-provider outage text for AI success', async () => {
     const run = vi.fn(async () => { throw new Error('private failure'); });
-    const output = await explainMealReasons({ ...input, transport: createExplanationTransport({ AI: { run } }) });
+    const output = await explainMealReasons({ ...input, transport: createExplanationTransport({ AI: { run }, AI_QWEN_ONLY: 'false' }) });
     expect(output).toMatchObject({ source: 'deterministic', fallbackReason: 'provider_unavailable' });
     expect(JSON.stringify(output)).not.toContain('private failure');
     expect(run).toHaveBeenCalledTimes(1);

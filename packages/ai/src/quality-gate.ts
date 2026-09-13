@@ -89,6 +89,29 @@ function usable<T extends { raw_name: string; confidence: number }>(item: T): bo
   return !isGenericScanLabel(item.raw_name) && Number.isFinite(item.confidence) && item.confidence >= AI_SCAN_MIN_CONFIDENCE;
 }
 
+function receiptDuplicateKey(item: ReceiptScanResult['items'][number]): string {
+  return [
+    normalizeLabel(item.raw_name),
+    item.estimated_quantity,
+    item.unit,
+    item.unit_price_vnd ?? '',
+    item.total_price_vnd ?? '',
+  ].join('|');
+}
+
+/** Reject only mathematically contradictory prices; package/weight pricing is ambiguous by design. */
+function hasImpossibleReceiptPrice(item: ReceiptScanResult['items'][number]): boolean {
+  const unitPrice = item.unit_price_vnd;
+  const totalPrice = item.total_price_vnd;
+  if (unitPrice === undefined || totalPrice === undefined || unitPrice <= 0 || totalPrice <= 0) return false;
+  if (item.unit !== 'piece' || !Number.isSafeInteger(item.estimated_quantity)) return false;
+  const expected = unitPrice * item.estimated_quantity;
+  if (!Number.isSafeInteger(expected) || expected <= 0) return false;
+  // Receipt OCR often reports package prices for weight/pack units. Restrict
+  // arithmetic consistency checks to countable items and allow small rounding.
+  return Math.abs(totalPrice - expected) > Math.max(1, expected * 0.25);
+}
+
 /** Validate and remove unusable vision items before they reach persistence. */
 export function applyVisionScanQualityGate(result: unknown): VisionScanResult {
   const validated = VisionScanResultSchema.parse(result);
@@ -102,8 +125,16 @@ export function applyVisionScanQualityGate(result: unknown): VisionScanResult {
 /** Validate and remove unusable receipt lines before they reach persistence. */
 export function applyReceiptScanQualityGate(result: unknown): ReceiptScanResult {
   const validated = ReceiptScanResultSchema.parse(result);
+  const seen = new Set<string>();
   const items = validated.items
     .filter(usable)
+    .filter((item) => !hasImpossibleReceiptPrice(item))
+    .filter((item) => {
+      const key = receiptDuplicateKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .map((item) => ({ ...item, raw_name: item.raw_name.trim() }));
   if (items.length === 0) throw new AIScanQualityError('receipt', validated.items.length);
   return { ...validated, items };

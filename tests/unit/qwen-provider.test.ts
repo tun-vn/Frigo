@@ -74,4 +74,15 @@ describe('QwenProvider', () => {
       expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'qwen3.7-flash-custom', enable_thinking: false });
     }
   });
+
+  it.each([
+    [404, 'resource not found'],
+    [400, 'unsupported model qwen-vl-ocr'],
+  ])('classifies Qwen model capability failures (%i) as MODEL_NOT_FOUND', async (status, detail) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(detail, { status }));
+
+    await expect(new QwenProvider('secret').receiptScan({ imageBase64OrUrl: 'AQI=' })).rejects.toMatchObject({
+      code: 'MODEL_NOT_FOUND', retryable: false,
+    });
+  });
 });

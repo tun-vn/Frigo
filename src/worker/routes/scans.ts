@@ -17,6 +17,7 @@ import { fetchHouseholdInventoryFromDb } from './inventory';
 import { reserveScanQuota, finalizeScanQuota, type ScanReservationSpec } from '../services/scan-quota';
 import { ensureScanQueueIntent } from '../services/scan-queue';
 import { sha256Hex } from '../utils/session';
+import { aiConfigFromEnv, logAIUsage } from '../config/ai';
 
 export const scanRoutes = new Hono<{ Bindings: Env; Variables: { auth: AuthContext } }>();
 
@@ -34,7 +35,7 @@ function scanFailureCode(error: unknown): string {
     return (error as { code: string }).code;
   }
   const message = error instanceof Error ? error.message : String(error);
-  const explicit = message.match(/\b(?:AI_SCAN_[A-Z_]+|REQUEST_TIMEOUT|NETWORK_ERROR|RATE_LIMITED|UPSTREAM_ERROR|MODEL_NOT_FOUND|AUTHENTICATION_FAILED|PERMISSION_DENIED|LICENSE_REQUIRED|INVALID_RESPONSE|SCHEMA_VALIDATION|IMAGE_NOT_FOUND|IMAGE_UNAVAILABLE)\b/);
+  const explicit = message.match(/\b(?:AI_SCAN_[A-Z_]+|AI_BUDGET_EXCEEDED|AI_ESCALATION_EXHAUSTED|AI_UNAVAILABLE|REQUEST_TIMEOUT|NETWORK_ERROR|RATE_LIMITED|UPSTREAM_ERROR|MODEL_NOT_FOUND|AUTHENTICATION_FAILED|PERMISSION_DENIED|LICENSE_REQUIRED|INVALID_RESPONSE|SCHEMA_VALIDATION|IMAGE_NOT_FOUND|IMAGE_UNAVAILABLE)\b/);
   if (explicit?.[0]) return explicit[0];
   if (/timeout|timed out|abort/i.test(message)) return 'REQUEST_TIMEOUT';
   if (/network|fetch failed|connection reset|econn/i.test(message)) return 'NETWORK_ERROR';
@@ -143,6 +144,8 @@ function publicScanErrorMessage(code: unknown): string | undefined {
     case 'UPSTREAM_ERROR':
       return 'Dịch vụ nhận diện đang bận hoặc mất kết nối. Vui lòng thử lại sau ít phút.';
     case 'AI_SCAN_UNAVAILABLE':
+    case 'AI_UNAVAILABLE':
+    case 'AI_ESCALATION_EXHAUSTED':
     case 'AI_PROVIDER_MODEL_UNAVAILABLE':
     case 'AI_PROVIDER_AUTH':
     case 'AI_PROVIDER_LICENSE':
@@ -171,6 +174,7 @@ function scanFailureStatus(code: string): 400 | 422 | 429 | 500 | 503 | 504 {
   if (code === 'REQUEST_TIMEOUT' || code === 'AI_SCAN_TIMEOUT') return 504;
   if (code === 'AI_SCAN_NO_USABLE_ITEMS' || code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') return 422;
   if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') return 400;
+  if (code === 'AI_BUDGET_EXCEEDED') return 422;
   if (RETRYABLE_SCAN_CODES.has(code) || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
       code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED' || code === 'RESERVATION_EXPIRED') return 503;
   return 500;
@@ -307,28 +311,7 @@ scanRoutes.use('/scans/receipt', rateLimiter({ maxRequests: 12, windowSeconds: 6
 
 // Helper to init AI Router with Cloudflare Workers AI GPU binding
 function getAIRouter(env: Env) {
-  const cloudflareVisionFallback = env.CLOUDFLARE_VISION_FALLBACK === undefined
-    ? undefined
-    : env.CLOUDFLARE_VISION_FALLBACK === 'true';
-  return new AIRouter({
-    aiMockMode: env.AI_MOCK_MODE === 'true',
-    aiBinding: env.AI,
-    qwenApiKey: env.QWEN_API_KEY,
-    qwenBaseUrl: env.QWEN_BASE_URL,
-    qwenModel: env.QWEN_MODEL,
-    qwenRequestTimeoutMs: Number(env.QWEN_REQUEST_TIMEOUT_MS) || undefined,
-    groqApiKey: env.GROQ_API_KEY,
-    groqBaseUrl: env.GROQ_BASE_URL,
-    groqVisionModel: env.GROQ_VISION_MODEL,
-    groqFallbackEnabled: env.GROQ_FALLBACK_ENABLED === 'true',
-    cloudflareVisionFallback,
-    zaiApiKey: env.ZAI_API_KEY,
-    zaiBaseUrl: env.ZAI_BASE_URL,
-    glmFallbackEnabled: env.GLM_FALLBACK_ENABLED === 'true',
-    deepseekApiKey: env.DEEPSEEK_API_KEY,
-    deepseekBaseUrl: env.DEEPSEEK_BASE_URL,
-    deepseekFallbackEnabled: env.DEEPSEEK_FALLBACK_ENABLED === 'true',
-  });
+  return new AIRouter(aiConfigFromEnv(env), logAIUsage);
 }
 
 // Helper: validate base64 size (max 5MB)
@@ -694,8 +677,9 @@ scanRoutes.post('/scans/fridge', async (c) => {
     }
   }
 
-  // Call Real Vision AI (B4: 25s timeout — Workers free tier CPU limit is 30s;
-  // without a timeout a hung AI call blocks the request until platform kill)
+  // Bound the provider call so a hung request cannot hold the Worker open
+  // indefinitely; Qwen full-page OCR/vision may legitimately use most of the
+  // 75-second request budget.
   let visionResult;
   try {
     const aiRouter = getAIRouter(c.env);

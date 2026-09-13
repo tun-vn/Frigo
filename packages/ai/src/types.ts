@@ -1,9 +1,16 @@
 import { VisionScanResult, ReceiptScanResult } from './schemas';
+import type { AIGovernanceConfig } from './model-governance';
 
 export interface VisionScanParams {
   imageBase64OrUrl: string;
   mimeType?: string;
   promptOverride?: string;
+}
+
+export interface AIProviderUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens?: number;
 }
 
 export interface AIProvider {
@@ -13,6 +20,7 @@ export interface AIProvider {
   normalizeIngredient(rawName: string): Promise<{ canonicalId: string | null; confidence: number }>;
   rankRecipes(recipeTitles: string[], userIngredients: string[]): Promise<string[]>;
   chat(prompt: string, context?: Record<string, unknown>): Promise<string>;
+  getLastUsage?(): AIProviderUsage | undefined;
 }
 
 export interface AIConfig {
@@ -41,6 +49,9 @@ export interface AIConfig {
   groqFallbackEnabled?: boolean;
   /** Use native Workers AI after external vision providers fail. */
   cloudflareVisionFallback?: boolean;
+  /** New runtime policy; defaults to Qwen-only when a Qwen key is configured. */
+  qwenOnly?: boolean;
+  governance?: AIGovernanceConfig;
   aiGatewayUrl?: string;
   aiBinding?: any;
 }

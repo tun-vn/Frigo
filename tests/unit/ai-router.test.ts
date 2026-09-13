@@ -83,6 +83,19 @@ describe('AI Router & Schema Verification', () => {
     })).toThrow(`${AI_SCAN_NO_USABLE_ITEMS}`);
   });
 
+  it('drops exact duplicate receipt lines and mathematically impossible piece prices', () => {
+    const result = applyReceiptScanQualityGate({
+      merchant_name: 'WinMart',
+      items: [
+        { raw_name: 'Cà chua', estimated_quantity: 2, unit: 'piece', unit_price_vnd: 10_000, total_price_vnd: 20_000, confidence: 0.95 },
+        { raw_name: ' Cà chua ', estimated_quantity: 2, unit: 'piece', unit_price_vnd: 10_000, total_price_vnd: 20_000, confidence: 0.95 },
+        { raw_name: 'Trứng gà', estimated_quantity: 2, unit: 'piece', unit_price_vnd: 20_000, total_price_vnd: 10_000, confidence: 0.95 },
+      ],
+    });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.raw_name).toBe('Cà chua');
+  });
+
   it('applies the quality gate before accepting provider output', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({

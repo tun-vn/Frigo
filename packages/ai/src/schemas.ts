@@ -52,13 +52,26 @@ export type ReceiptScanResult = z.infer<typeof ReceiptScanResultSchema>;
 
 export interface AIUsageLog {
   userId?: string;
-  task: 'fridge_scan' | 'receipt_scan' | 'ingredient_normalization' | 'recipe_rank' | 'chat';
+  task: 'fridge_scan' | 'receipt_scan' | 'ingredient_normalization' | 'recipe_rank' | 'chat'
+    | 'recipe_generation' | 'recipe_ranking' | 'recipe_explanation' | 'fridge_chat' | 'receipt_ocr' | 'label_ocr'
+    | 'fridge_image_analysis' | 'weekly_plan' | 'weekly_plan_repair' | 'weekly_plan_complex'
+    | 'inventory_candidate_extraction' | 'offline_evaluation';
   provider: string;
   model: string;
+  logicalModel?: string;
+  physicalModel?: string;
+  promptId?: string;
+  promptVersion?: string;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens?: number;
   latencyMs: number;
+  estimatedCostUsd?: number;
+  pricingVersion?: string;
   estimatedCost: number;
+  attempt?: number;
+  escalationReason?: string;
+  failureCode?: string;
   status: 'success' | 'error' | 'fallback';
   createdAt: string;
 }

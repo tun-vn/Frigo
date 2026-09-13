@@ -40,6 +40,26 @@ export class AIRequestError extends AIProviderError {
   }
 }
 
+export class AIBudgetExceededError extends AIProviderError {
+  readonly task?: string;
+
+  constructor(message: string, task?: string) {
+    super(message, { code: 'AI_BUDGET_EXCEEDED', retryable: false, provider: 'governance' });
+    this.name = 'AIBudgetExceededError';
+    this.task = task;
+  }
+}
+
+export class AIEscalationExhaustedError extends AIProviderError {
+  readonly task?: string;
+
+  constructor(message: string, task?: string) {
+    super(message, { code: 'AI_ESCALATION_EXHAUSTED', retryable: false, provider: 'governance' });
+    this.name = 'AIEscalationExhaustedError';
+    this.task = task;
+  }
+}
+
 export function isAIProviderError(value: unknown): value is AIProviderError {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<AIProviderError>;
@@ -50,9 +70,18 @@ export function isRetryableAIStatus(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
-export function classifyAIHttpCode(status: number, detail = ''): string {
+export function classifyAIHttpCode(status: number, detail = '', provider?: string): string {
   const normalized = detail.toLowerCase();
-  if (status === 404 && /(model[_ -]?not[_ -]?found|model[\s\S]{0,120}(?:not found|does not exist)|no access)/i.test(normalized)) {
+  // Model Studio has returned both 400 and 404 for an unavailable model,
+  // sometimes with only a generic `unsupported model` detail. Treat those as
+  // a model capability failure so the Qwen OCR role can move to its explicit
+  // Qwen multimodal fallback instead of retrying the same bad alias.
+  const modelUnavailable = /(model[_ -]?not[_ -]?found|model[\s\S]{0,160}(?:not found|does not exist|unsupported|unavailable|not available)|(?:unsupported|unknown)\s+model|no access)/i.test(normalized);
+  const qwenNotFound = provider?.toLowerCase() === 'qwen' && status === 404;
+  if (modelUnavailable && (status === 400 || status === 404 || status === 422 || provider?.toLowerCase() === 'qwen')) {
+    return 'MODEL_NOT_FOUND';
+  }
+  if (qwenNotFound) {
     return 'MODEL_NOT_FOUND';
   }
   if (status === 401) return 'AUTHENTICATION_FAILED';
@@ -75,7 +104,7 @@ export function createAIHttpError(
   return new AIRequestError(
     `${provider} API error: ${status}${cleanDetail ? ` ${cleanDetail}` : ''}`,
     {
-      code: classifyAIHttpCode(status, cleanDetail),
+      code: classifyAIHttpCode(status, cleanDetail, provider),
       retryable: isRetryableAIStatus(status),
       status,
       provider,

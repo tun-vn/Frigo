@@ -1,0 +1,52 @@
+{
+  "version": "2026-09-13.v1",
+  "cases": [
+    {
+      "id": "ingredient-vi",
+      "locale": "vi",
+      "task": "ingredient_normalization",
+      "input": "Ức gà",
+      "expected": { "canonicalId": "CHICKEN_BREAST" }
+    },
+    {
+      "id": "ingredient-ja",
+      "locale": "ja",
+      "task": "ingredient_normalization",
+      "input": "鶏むね肉",
+      "expected": { "canonicalId": "CHICKEN_BREAST" }
+    },
+    {
+      "id": "ingredient-en",
+      "locale": "en",
+      "task": "ingredient_normalization",
+      "input": "chicken breast",
+      "expected": { "canonicalId": "CHICKEN_BREAST" }
+    },
+    {
+      "id": "receipt-low-confidence",
+      "locale": "vi",
+      "task": "receipt_ocr",
+      "input": { "image": "fixture://receipt-vietnamese" },
+      "expected": { "qualityGate": "reject-low-confidence" }
+    },
+    {
+      "id": "planner-allergy-conflict",
+      "locale": "en",
+      "task": "weekly_plan",
+      "input": {
+        "inventory": [{ "canonicalId": "PEANUT", "quantity": 100, "unit": "g" }],
+        "allergies": ["peanut"],
+        "days": 3
+      },
+      "expected": { "validator": "allergy-exclusion-authoritative" }
+    },
+    {
+      "id": "malformed-structured-response",
+      "locale": "ja",
+      "task": "recipe_explanation",
+      "input": { "reasonCodes": ["EXPIRING_SOON"] },
+      "modelOutput": "```json {broken}",
+      "expected": { "runtime": "bounded-repair" }
+    }
+  ]
+}

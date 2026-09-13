@@ -19,6 +19,7 @@
     "week:reconcile:local": "bash scripts/d1-week-reconcile.sh local",
     "week:reconcile:remote": "bash scripts/d1-week-reconcile.sh remote",
     "week:repair:kv": "node scripts/week-repair-from-kv.mjs",
+    "ai:eval": "node scripts/ai-eval.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\" \"packages/**/*.{ts,tsx}\"",

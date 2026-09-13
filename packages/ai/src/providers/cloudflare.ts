@@ -6,6 +6,33 @@ export interface CloudflareAIBinding {
   run: (model: string, inputs: any, options?: any) => Promise<any>;
 }
 
+/** Legacy compatibility model; production Frigo routing never selects it. */
+export const CLOUDFLARE_EXPLANATION_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+
+export async function runLegacyCloudflareExplanation(
+  ai: CloudflareAIBinding,
+  facts: { locale: string; reasonCodes: readonly string[] },
+  system: string,
+  maxTokens: number,
+): Promise<string> {
+  const result = await ai.run(CLOUDFLARE_EXPLANATION_MODEL, {
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: JSON.stringify(facts) },
+    ],
+    max_tokens: maxTokens,
+    temperature: 0,
+  });
+  if (typeof result === 'string') return result;
+  if (result && typeof result === 'object') {
+    const value = result as Record<string, unknown>;
+    if (typeof value.response === 'string') return value.response;
+    if (typeof value.content === 'string') return value.content;
+    if (typeof value.output_text === 'string') return value.output_text;
+  }
+  throw new Error('Explanation provider returned an invalid response');
+}
+
 function base64ToByteArray(input: string): number[] {
   try {
     const cleanBase64 = input.replace(/^data:image\/\w+;base64,/, '').trim();

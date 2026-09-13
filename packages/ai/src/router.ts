@@ -1,14 +1,17 @@
 import { AIConfig, AIProvider, VisionScanParams } from './types';
 import { VisionScanResult, AIUsageLog } from './schemas';
+import { z } from 'zod';
 import { MockAIProvider } from './providers/mock';
 import { QwenProvider, QWEN_DEFAULT_MODEL } from './providers/qwen';
 import { GLMProvider } from './providers/glm';
 import { DeepSeekProvider } from './providers/deepseek';
 import { CloudflareAIProvider } from './providers/cloudflare';
 import { GroqProvider, GROQ_DEFAULT_VISION_MODEL } from './providers/groq';
-import { findCanonicalIngredient } from '@frigo/domain';
+import { CANONICAL_INGREDIENTS, findCanonicalIngredient, findCanonicalIngredientById } from '@frigo/domain';
 import { AIProviderError, isAIProviderError } from './errors';
 import { applyReceiptScanQualityGate, applyVisionScanQualityGate } from './quality-gate';
+import { QwenTaskRuntime, type AIRuntimeRequest, type AIRuntimeResult } from './task-runtime';
+import { AIUsageLedger, type AIUsageSnapshot } from './telemetry';
 
 type ScanFailureType = 'vision' | 'receipt';
 
@@ -62,12 +65,23 @@ export class AIRouter {
   private mockProvider: MockAIProvider;
   private silentFallback: boolean;
   private onUsageLogged?: (log: AIUsageLog) => void;
+  private taskRuntime?: QwenTaskRuntime;
+  private readonly usageLedger = new AIUsageLedger();
 
   constructor(config: AIConfig, onUsageLogged?: (log: AIUsageLog) => void) {
     this.config = config;
     this.onUsageLogged = onUsageLogged;
     this.mockProvider = new MockAIProvider();
     this.silentFallback = config.silentFallback !== false; // default ON (fail loudly)
+
+    // Production composition opts into the task runtime explicitly. Legacy
+    // provider arrays remain available for compatibility fixtures and future
+    // migrations, but are never constructed on the Qwen-only path.
+    const qwenOnly = config.qwenOnly === true || config.governance?.qwenOnly === true;
+    if (!config.aiMockMode && qwenOnly) {
+      this.taskRuntime = new QwenTaskRuntime({ ...config, qwenOnly: true }, (log) => this.logUsage(log));
+      return;
+    }
 
     if (!config.aiMockMode) {
       // Qwen is the primary multimodal/text provider. Other adapters remain
@@ -104,7 +118,63 @@ export class AIRouter {
     }
   }
 
+  get governanceConfig() {
+    return this.taskRuntime?.governanceConfig;
+  }
+
+  getUsageSnapshot(): AIUsageSnapshot {
+    return this.usageLedger.snapshot();
+  }
+
+  private normalizeQwenTaskFailure(type: ScanFailureType, error: unknown): AIProviderError {
+    if (isAIProviderError(error) && error.code !== 'AI_UNAVAILABLE') return error;
+    const cause = error instanceof Error ? error : undefined;
+    return aggregateScanFailure(type, [new AIProviderError(
+      `Qwen ${type} task is unavailable`,
+      { code: 'AI_SCAN_UNAVAILABLE', retryable: false, provider: 'qwen', cause },
+    )]);
+  }
+
+  /** Task-based entry point. Feature code can use this without selecting a model. */
+  async generate<T = unknown>(request: AIRuntimeRequest<T>): Promise<AIRuntimeResult<T>> {
+    if (!this.config.aiMockMode) {
+      this.taskRuntime ??= new QwenTaskRuntime({ ...this.config, qwenOnly: true }, (log) => this.logUsage(log));
+      return this.taskRuntime.generate(request);
+    }
+    const startedAt = Date.now();
+    let value: unknown;
+    switch (request.task) {
+      case 'fridge_image_analysis': value = await this.mockProvider.vision(request.input as VisionScanParams); break;
+      case 'receipt_ocr':
+      case 'label_ocr': value = await this.mockProvider.receiptScan(request.input as VisionScanParams); break;
+      case 'ingredient_normalization': value = await this.mockProvider.normalizeIngredient(String(request.input)); break;
+      case 'fridge_chat': value = await this.mockProvider.chat(String(request.input)); break;
+      case 'recipe_ranking': value = await this.mockProvider.rankRecipes(
+        (request.input as { recipeTitles?: string[] }).recipeTitles || [],
+        (request.input as { userIngredients?: string[] }).userIngredients || [],
+      ); break;
+      default: value = await this.mockProvider.chat(JSON.stringify(request.input));
+    }
+    const parsedValue = request.task === 'recipe_ranking' ? { ranked_titles: value } : value;
+    const parsed = request.schema ? request.schema.parse(parsedValue) : parsedValue;
+    const log: AIUsageLog = {
+      task: request.task === 'fridge_image_analysis' ? 'fridge_scan' : request.task === 'receipt_ocr' ? 'receipt_scan' : request.task,
+      provider: 'mock', model: 'mock', inputTokens: 0, outputTokens: 0,
+      latencyMs: Date.now() - startedAt, estimatedCost: 0, status: 'success', createdAt: new Date().toISOString(),
+    };
+    this.logUsage(log);
+    return { value: parsed as T, usage: [log], attempts: 1, logicalModel: 'QWEN_FAST', physicalModel: 'mock' };
+  }
+
   async vision(params: VisionScanParams): Promise<VisionScanResult> {
+    if (this.taskRuntime) {
+      try {
+        const result = await this.taskRuntime.generate<VisionScanResult>({ task: 'fridge_image_analysis', input: params });
+        return result.value;
+      } catch (error) {
+        throw this.normalizeQwenTaskFailure('vision', error);
+      }
+    }
     const startTime = Date.now();
 
     // Mock data is allowed only when explicitly enabled. A missing provider in
@@ -206,6 +276,14 @@ export class AIRouter {
   }
 
   async receiptScan(params: VisionScanParams): Promise<import('./schemas').ReceiptScanResult> {
+    if (this.taskRuntime) {
+      try {
+        const result = await this.taskRuntime.generate<import('./schemas').ReceiptScanResult>({ task: 'receipt_ocr', input: params });
+        return result.value;
+      } catch (error) {
+        throw this.normalizeQwenTaskFailure('receipt', error);
+      }
+    }
     const startTime = Date.now();
 
     if (this.config.aiMockMode) {
@@ -285,6 +363,24 @@ export class AIRouter {
   async normalizeIngredient(rawName: string): Promise<{ canonicalId: string | null; confidence: number }> {
     const deterministic = findCanonicalIngredient(rawName);
     if (deterministic) return { canonicalId: deterministic.id, confidence: 1 };
+    if (this.taskRuntime) {
+      const result = await this.taskRuntime.generate<{ canonicalId: string | null; confidence: number }>({
+        task: 'ingredient_normalization',
+        input: {
+          rawName,
+          // Keep the candidate set compact and server-owned. The model may
+          // choose only from these IDs; the result is checked again below.
+          candidates: CANONICAL_INGREDIENTS.map(({ id, nameVi, nameEn }) => ({ id, nameVi, nameEn })),
+        },
+        schema: z.object({
+          canonicalId: z.string().nullable(),
+          confidence: z.number().min(0).max(1),
+        }),
+      });
+      const canonical = findCanonicalIngredientById(result.value.canonicalId);
+      if (!canonical || result.value.confidence < 0.6) return { canonicalId: null, confidence: 0 };
+      return { canonicalId: canonical.id, confidence: result.value.confidence };
+    }
     if (this.config.aiMockMode) return this.mockProvider.normalizeIngredient(rawName);
 
     const providers = [...this.textProviders, ...this.visionProviders].filter(
@@ -301,6 +397,18 @@ export class AIRouter {
   }
 
   async rankRecipes(recipeTitles: string[], userIngredients: string[]): Promise<string[]> {
+    if (this.taskRuntime) {
+      const result = await this.taskRuntime.generate<{ ranked_titles: string[] }>({
+        task: 'recipe_ranking',
+        input: { recipeTitles, userIngredients },
+        schema: z.object({ ranked_titles: z.array(z.string()).min(1) }),
+      });
+      const allowed = new Map(recipeTitles.map((title) => [title.trim().toLocaleLowerCase(), title]));
+      const ranked = result.value.ranked_titles
+        .map((title) => allowed.get(title.trim().toLocaleLowerCase()))
+        .filter((title): title is string => Boolean(title));
+      return [...new Set(ranked), ...recipeTitles.filter((title) => !ranked.includes(title))];
+    }
     for (const provider of this.textProviders) {
       try {
         return await provider.rankRecipes(recipeTitles, userIngredients);
@@ -312,6 +420,10 @@ export class AIRouter {
   }
 
   async chat(prompt: string, context?: Record<string, unknown>): Promise<string> {
+    if (this.taskRuntime) {
+      const result = await this.taskRuntime.generate<string>({ task: 'fridge_chat', input: prompt, context });
+      return result.value;
+    }
     if (this.config.aiMockMode) return this.mockProvider.chat(prompt);
     if (!this.config.aiMockMode) {
       for (const provider of this.textProviders) {
@@ -326,6 +438,7 @@ export class AIRouter {
   }
 
   private logUsage(log: AIUsageLog) {
+    this.usageLedger.record(log);
     if (this.onUsageLogged) {
       this.onUsageLogged(log);
     }

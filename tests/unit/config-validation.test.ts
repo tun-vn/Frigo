@@ -36,6 +36,16 @@ describe('validateEnvironment', () => {
       ZAI_API_KEY: 'glm-key',
       GLM_FALLBACK_ENABLED: 'true',
     })).toEqual(['glm']);
+
+    expect(getEffectiveVisionProviders({
+      AI_MOCK_MODE: 'false',
+      AI_QWEN_ONLY: 'true',
+      QWEN_API_KEY: 'qwen-key',
+      GROQ_API_KEY: 'groq-key',
+      GROQ_FALLBACK_ENABLED: 'true',
+      CLOUDFLARE_VISION_FALLBACK: 'true',
+      AI: {},
+    })).toEqual(['qwen']);
   });
 
   it('accepts a well-formed production configuration', () => {
@@ -134,6 +144,21 @@ describe('validateEnvironment', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('rejects production configurations that explicitly disable Qwen-only routing', () => {
+    const result = validateEnvironment(productionEnv({ AI_QWEN_ONLY: 'false' }));
+    expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_QWEN_ONLY_REQUIRED');
+  });
+
+  it('rejects production configurations that explicitly disable the AI runtime', () => {
+    const result = validateEnvironment(productionEnv({ AI_ENABLED: 'false' }));
+    expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_AI_DISABLED_IN_PRODUCTION');
+  });
+
+  it('rejects non-Qwen physical model aliases in production', () => {
+    const result = validateEnvironment(productionEnv({ AI_MODEL_FAST: 'llama-3.1-8b' }));
+    expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_AI_MODEL_INVALID');
+  });
+
   it('requires R2 image storage for production async scans', () => {
     const result = validateEnvironment(productionEnv({ IMAGES: undefined }));
     expect(result.ok).toBe(false);
@@ -167,6 +192,11 @@ describe('validateEnvironment', () => {
       QWEN_MODEL: 'qwen3.7-flash',
     }));
     expect(result.fatal).toEqual([]);
+  });
+
+  it('rejects a non-Qwen legacy model alias in production', () => {
+    const result = validateEnvironment(productionEnv({ QWEN_MODEL: 'llama-3.1-8b' }));
+    expect(result.fatal.map((issue) => issue.code)).toContain('CONFIG_QWEN_MODEL_INVALID');
   });
 
   it.each([undefined, '', '  '])('rejects a missing or blank production Turnstile secret (%s)', (TURNSTILE_SECRET_KEY) => {

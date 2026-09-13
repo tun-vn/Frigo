@@ -44,6 +44,21 @@ export interface Env {
   QWEN_BASE_URL?: string;
   QWEN_MODEL?: string;
   QWEN_REQUEST_TIMEOUT_MS?: string;
+  AI_ENABLED?: string;
+  AI_QWEN_ONLY?: string;
+  AI_ALLOW_REASONING_MODEL?: string;
+  AI_ALLOW_JUDGE_MODEL?: string;
+  AI_MAX_CALLS_PER_OPERATION?: string;
+  AI_MAX_TOTAL_TOKENS?: string;
+  AI_MAX_INPUT_TOKENS?: string;
+  AI_MAX_OUTPUT_TOKENS?: string;
+  AI_SHADOW_CANARY_PERCENT?: string;
+  AI_MODEL_FAST?: string;
+  AI_MODEL_FAST_CANARY?: string;
+  AI_MODEL_MULTIMODAL?: string;
+  AI_MODEL_OCR?: string;
+  AI_MODEL_REASONING?: string;
+  AI_MODEL_JUDGE?: string;
 
   GROQ_API_KEY?: string;
   GROQ_BASE_URL?: string;
