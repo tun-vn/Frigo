@@ -4,7 +4,7 @@ import type { AIUsageLog } from '../../../packages/ai/src/schemas';
 import type { Env } from '../types';
 
 /** Build one server-side AI policy from Worker vars. Secrets stay in Env. */
-export function aiConfigFromEnv(env: Env): AIConfig {
+export function aiConfigFromEnv(env: Env, backgroundExecutor?: (promise: Promise<unknown>) => void): AIConfig {
   const governance = createGovernanceConfig(
     env as unknown as Record<string, string | undefined>,
     {
@@ -23,6 +23,7 @@ export function aiConfigFromEnv(env: Env): AIConfig {
     qwenRequestTimeoutMs: Number(env.QWEN_REQUEST_TIMEOUT_MS) || undefined,
     qwenOnly: governance.qwenOnly,
     governance,
+    backgroundExecutor,
     aiBinding: env.AI,
     groqApiKey: env.GROQ_API_KEY,
     groqBaseUrl: env.GROQ_BASE_URL,

@@ -30,10 +30,18 @@ export const AI_MODEL_ROLES = [
 
 export type AIModelRole = (typeof AI_MODEL_ROLES)[number];
 
+export interface ModelCapabilities {
+  supportsJsonResponseFormat: boolean;
+  supportsThinkingControl: boolean;
+  supportsVision: boolean;
+}
+
 export interface ModelAlias {
   role: AIModelRole;
   physicalModel: string;
   pinned: boolean;
+  /** Optional for backward-compatible custom governance overrides. */
+  capabilities?: ModelCapabilities;
 }
 
 export interface ModelPricing {
@@ -68,27 +76,79 @@ export interface AIGovernanceConfig {
   maxTotalTokensPerOperation: number;
   maxInputTokens: number;
   maxOutputTokens: number;
+  maxImageBytes: number;
+  maxOcrImageBytes: number;
   shadowCanaryPercent: number;
 }
 
-const DEFAULT_MODELS: Record<AIModelRole, ModelAlias> = {
-  QWEN_FAST: { role: 'QWEN_FAST', physicalModel: 'qwen3.7-flash-2026-07-15', pinned: true },
-  QWEN_FAST_CANARY: { role: 'QWEN_FAST_CANARY', physicalModel: 'qwen3.7-flash', pinned: false },
-  QWEN_MULTIMODAL: { role: 'QWEN_MULTIMODAL', physicalModel: 'qwen3.8-flash', pinned: true },
-  QWEN_OCR: { role: 'QWEN_OCR', physicalModel: 'qwen-vl-ocr', pinned: true },
-  QWEN_REASONING: { role: 'QWEN_REASONING', physicalModel: 'qwen3.8-27b', pinned: true },
-  QWEN_JUDGE: { role: 'QWEN_JUDGE', physicalModel: 'qwen3.8-max-0902', pinned: true },
+const TEXT_CAPABILITIES: ModelCapabilities = {
+  supportsJsonResponseFormat: true,
+  supportsThinkingControl: true,
+  supportsVision: false,
 };
+
+const MULTIMODAL_CAPABILITIES: ModelCapabilities = {
+  supportsJsonResponseFormat: true,
+  supportsThinkingControl: true,
+  supportsVision: true,
+};
+
+const OCR_CAPABILITIES: ModelCapabilities = {
+  // Qwen-VL-OCR accepts JSON instructions in the prompt but does not support
+  // the chat-completions response_format option.
+  supportsJsonResponseFormat: false,
+  supportsThinkingControl: false,
+  supportsVision: true,
+};
+
+export const MODEL_CAPABILITIES: Record<AIModelRole, ModelCapabilities> = {
+  QWEN_FAST: TEXT_CAPABILITIES,
+  QWEN_FAST_CANARY: TEXT_CAPABILITIES,
+  QWEN_MULTIMODAL: MULTIMODAL_CAPABILITIES,
+  QWEN_OCR: OCR_CAPABILITIES,
+  QWEN_REASONING: TEXT_CAPABILITIES,
+  QWEN_JUDGE: TEXT_CAPABILITIES,
+};
+
+const DEFAULT_MODELS: Record<AIModelRole, ModelAlias> = {
+  QWEN_FAST: { role: 'QWEN_FAST', physicalModel: 'qwen3.7-flash-2026-07-15', pinned: true, capabilities: MODEL_CAPABILITIES.QWEN_FAST },
+  QWEN_FAST_CANARY: { role: 'QWEN_FAST_CANARY', physicalModel: 'qwen3.7-flash', pinned: false, capabilities: MODEL_CAPABILITIES.QWEN_FAST_CANARY },
+  QWEN_MULTIMODAL: { role: 'QWEN_MULTIMODAL', physicalModel: 'qwen3.8-flash', pinned: true, capabilities: MODEL_CAPABILITIES.QWEN_MULTIMODAL },
+  // Alibaba documents this as a rolling OCR alias; keep it explicit rather
+  // than claiming a snapshot we cannot verify for the Singapore endpoint.
+  QWEN_OCR: { role: 'QWEN_OCR', physicalModel: 'qwen-vl-ocr', pinned: false, capabilities: MODEL_CAPABILITIES.QWEN_OCR },
+  QWEN_REASONING: { role: 'QWEN_REASONING', physicalModel: 'qwen3.8-27b', pinned: true, capabilities: MODEL_CAPABILITIES.QWEN_REASONING },
+  QWEN_JUDGE: { role: 'QWEN_JUDGE', physicalModel: 'qwen3.8-max-0902', pinned: true, capabilities: MODEL_CAPABILITIES.QWEN_JUDGE },
+};
+
+const GENERIC_QWEN_CAPABILITIES: ModelCapabilities = {
+  supportsJsonResponseFormat: true,
+  supportsThinkingControl: true,
+  supportsVision: true,
+};
+
+const PHYSICAL_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
+  'qwen-vl-ocr': OCR_CAPABILITIES,
+};
+
+export function capabilitiesForPhysicalModel(model: string): ModelCapabilities {
+  const normalized = model.trim().toLowerCase();
+  if (normalized === 'qwen-vl-ocr' || normalized.startsWith('qwen-vl-ocr-')) return OCR_CAPABILITIES;
+  return PHYSICAL_MODEL_CAPABILITIES[normalized] || GENERIC_QWEN_CAPABILITIES;
+}
 
 // These are estimates, not provider billing truth. Deployments can replace
 // them through AI_PRICE_* variables without changing domain/application code.
 const DEFAULT_PRICING: Record<string, ModelPricing> = {
-  'qwen3.7-flash-2026-07-15': { inputUsdPerMillion: 0.20, outputUsdPerMillion: 0.60, cachedInputUsdPerMillion: 0.04, pricingVersion: 'estimate-2026-09' },
-  'qwen3.7-flash': { inputUsdPerMillion: 0.20, outputUsdPerMillion: 0.60, cachedInputUsdPerMillion: 0.04, pricingVersion: 'estimate-2026-09' },
-  'qwen3.8-flash': { inputUsdPerMillion: 0.30, outputUsdPerMillion: 0.90, cachedInputUsdPerMillion: 0.06, pricingVersion: 'estimate-2026-09' },
-  'qwen-vl-ocr': { inputUsdPerMillion: 0.30, outputUsdPerMillion: 0.90, cachedInputUsdPerMillion: 0.06, pricingVersion: 'estimate-2026-09' },
-  'qwen3.8-27b': { inputUsdPerMillion: 1.00, outputUsdPerMillion: 4.00, cachedInputUsdPerMillion: 0.20, pricingVersion: 'estimate-2026-09' },
-  'qwen3.8-max-0902': { inputUsdPerMillion: 2.00, outputUsdPerMillion: 8.00, cachedInputUsdPerMillion: 0.40, pricingVersion: 'estimate-2026-09' },
+  // Singapore low-context planning estimates. Frigo caps normal input at 12K.
+  'qwen3.7-flash-2026-07-15': { inputUsdPerMillion: 0.03, outputUsdPerMillion: 0.13, cachedInputUsdPerMillion: 0.006, pricingVersion: 'estimate-2026-09-sg-low-context' },
+  'qwen3.7-flash': { inputUsdPerMillion: 0.03, outputUsdPerMillion: 0.13, cachedInputUsdPerMillion: 0.006, pricingVersion: 'estimate-2026-09-sg-low-context' },
+  'qwen3.8-flash': { inputUsdPerMillion: 0.15, outputUsdPerMillion: 0.47, cachedInputUsdPerMillion: 0.03, pricingVersion: 'estimate-2026-09-sg-low-context' },
+  'qwen-vl-ocr': { inputUsdPerMillion: 0.07, outputUsdPerMillion: 0.16, cachedInputUsdPerMillion: 0.014, pricingVersion: 'estimate-2026-09-sg-low-context' },
+  'qwen3.8-27b': { inputUsdPerMillion: 0.50, outputUsdPerMillion: 3.00, cachedInputUsdPerMillion: 0.10, pricingVersion: 'estimate-2026-09-sg-low-context' },
+  // Judge pricing is retained as a rounded planning estimate only; this role
+  // remains disabled for normal live routing.
+  'qwen3.8-max-0902': { inputUsdPerMillion: 2.00, outputUsdPerMillion: 8.00, cachedInputUsdPerMillion: 0.40, pricingVersion: 'estimate-2026-09-judge-planning' },
 };
 
 const DEFAULT_TASK_POLICIES: Record<AITask, AITaskPolicy> = {
@@ -163,7 +223,7 @@ function envPrice(env: Record<string, string | undefined>, key: string, fallback
 
 export function createGovernanceConfig(
   env: Record<string, string | undefined> = {},
-  overrides: Partial<Pick<AIGovernanceConfig, 'qwenOnly' | 'models' | 'pricing' | 'taskPolicies'>> = {},
+  overrides: Partial<Pick<AIGovernanceConfig, 'qwenOnly' | 'models' | 'pricing' | 'taskPolicies' | 'maxImageBytes' | 'maxOcrImageBytes'>> = {},
 ): AIGovernanceConfig {
   const qwenOnly = overrides.qwenOnly ?? parseBoolean(env.AI_QWEN_ONLY, true);
   const modelNames: Record<AIModelRole, string> = {
@@ -175,14 +235,22 @@ export function createGovernanceConfig(
     QWEN_JUDGE: envModel(env, 'AI_MODEL_JUDGE', DEFAULT_MODELS.QWEN_JUDGE.physicalModel, qwenOnly),
   };
   const configuredModels = overrides.models || Object.fromEntries(
-    AI_MODEL_ROLES.map((role) => [role, { ...DEFAULT_MODELS[role], physicalModel: modelNames[role] }]),
+    AI_MODEL_ROLES.map((role) => [role, {
+      ...DEFAULT_MODELS[role],
+      physicalModel: modelNames[role],
+      capabilities: capabilitiesForPhysicalModel(modelNames[role]),
+    }]),
   ) as Record<AIModelRole, ModelAlias>;
   const models = Object.fromEntries(AI_MODEL_ROLES.map((role) => {
     const configured = configuredModels[role] || DEFAULT_MODELS[role];
     const physicalModel = qwenOnly && !isQwenModelIdentifier(configured.physicalModel)
       ? DEFAULT_MODELS[role].physicalModel
       : configured.physicalModel;
-    return [role, { ...configured, physicalModel }];
+    return [role, {
+      ...configured,
+      physicalModel,
+      capabilities: configured.capabilities || capabilitiesForPhysicalModel(physicalModel),
+    }];
   })) as Record<AIModelRole, ModelAlias>;
   const pricing = overrides.pricing || Object.fromEntries(
     AI_MODEL_ROLES.map((role) => {
@@ -210,6 +278,8 @@ export function createGovernanceConfig(
     maxTotalTokensPerOperation: parseBoundedInteger(env.AI_MAX_TOTAL_TOKENS, 16_000, 1_024, 32_000),
     maxInputTokens: parseBoundedInteger(env.AI_MAX_INPUT_TOKENS, 12_000, 1_024, 32_000),
     maxOutputTokens: parseBoundedInteger(env.AI_MAX_OUTPUT_TOKENS, 2_048, 128, 8_192),
+    maxImageBytes: overrides.maxImageBytes ?? parseBoundedInteger(env.AI_MAX_IMAGE_BYTES, 5 * 1024 * 1024, 64 * 1024, 20 * 1024 * 1024),
+    maxOcrImageBytes: overrides.maxOcrImageBytes ?? parseBoundedInteger(env.AI_MAX_OCR_IMAGE_BYTES, 5 * 1024 * 1024, 64 * 1024, 20 * 1024 * 1024),
     shadowCanaryPercent: parseBoundedPercent(env.AI_SHADOW_CANARY_PERCENT),
   };
 }
@@ -283,7 +353,11 @@ export function governanceFromAIConfig(config: AIConfig): AIGovernanceConfig {
   const models = legacyModel && !qwenOnly
     ? Object.fromEntries(AI_MODEL_ROLES.map((role) => [
         role,
-        { ...DEFAULT_MODELS[role], physicalModel: role === 'QWEN_FAST_CANARY' ? DEFAULT_MODELS[role].physicalModel : legacyModel },
+        {
+          ...DEFAULT_MODELS[role],
+          physicalModel: role === 'QWEN_FAST_CANARY' ? DEFAULT_MODELS[role].physicalModel : legacyModel,
+          capabilities: capabilitiesForPhysicalModel(role === 'QWEN_FAST_CANARY' ? DEFAULT_MODELS[role].physicalModel : legacyModel),
+        },
       ])) as Record<AIModelRole, ModelAlias>
     : undefined;
   return createGovernanceConfig({}, { qwenOnly, models });

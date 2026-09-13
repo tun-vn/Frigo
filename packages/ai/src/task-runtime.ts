@@ -4,6 +4,7 @@ import type { AIUsageLog, ReceiptScanResult, VisionScanResult } from './schemas'
 import {
   AIBudgetExceededError,
   AIEscalationExhaustedError,
+  AIImageTooLargeError,
   AIProviderError,
   createAIResponseError,
   createAISchemaError,
@@ -16,6 +17,7 @@ import {
   getModelAlias,
   getTaskPolicy,
   governanceFromAIConfig,
+  capabilitiesForPhysicalModel,
   serializeForPrompt,
   type AIGovernanceConfig,
   type AIModelRole,
@@ -84,6 +86,19 @@ function isVisionTask(task: AITask): boolean {
   return task === 'receipt_ocr' || task === 'label_ocr' || task === 'fridge_image_analysis';
 }
 
+function estimateDecodedImageBytes(value: string): number | undefined {
+  const input = value.trim();
+  if (!input || /^https?:\/\//i.test(input)) return undefined;
+  const match = input.match(/^data:[^;,]+;base64,([\s\S]*)$/i);
+  const encoded = (match?.[1] ?? input).replace(/\s+/g, '');
+  if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return undefined;
+  const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+  // Base64 carries four characters for every three decoded bytes. The
+  // decoded length is exact for valid padded input and conservative for
+  // unpadded input, without allocating a second copy of the image.
+  return Math.floor((encoded.length * 3) / 4) - padding;
+}
+
 function visionInputForBudget(input: VisionScanParams, repairInput?: unknown): unknown {
   // Image bytes are provider-tokenized independently of prompt characters.
   // Count a bounded marker here so a large base64 string cannot bypass or
@@ -125,10 +140,12 @@ export class QwenTaskRuntime {
   private readonly governance: AIGovernanceConfig;
   private readonly providers = new Map<AIModelRole, QwenProvider>();
   private readonly onUsageLogged?: (log: AIUsageLog) => void;
+  private readonly backgroundExecutor?: (promise: Promise<unknown>) => void;
 
   constructor(config: AIConfig, onUsageLogged?: (log: AIUsageLog) => void) {
     this.governance = governanceFromAIConfig(config);
     this.onUsageLogged = onUsageLogged;
+    this.backgroundExecutor = config.backgroundExecutor;
     if (config.qwenApiKey?.trim()) {
       for (const role of Object.keys(this.governance.models) as AIModelRole[]) {
         const alias = getModelAlias(this.governance, role);
@@ -137,6 +154,7 @@ export class QwenTaskRuntime {
           config.qwenBaseUrl,
           alias.physicalModel,
           config.qwenRequestTimeoutMs,
+          alias.capabilities || capabilitiesForPhysicalModel(alias.physicalModel),
         ));
       }
     }
@@ -151,6 +169,8 @@ export class QwenTaskRuntime {
     const policy = getTaskPolicy(this.governance, request.task);
     const maxOutputTokens = Math.min(policy.maxOutputTokens, this.governance.maxOutputTokens);
     const roles = this.rolesFor(policy.role, policy.escalationRole, policy.allowEscalation);
+    const visionInput = isVisionTask(request.task) ? asVisionInput(request.input) : undefined;
+    if (visionInput) this.assertImageSize(request.task, visionInput);
     const usage: AIUsageLog[] = [];
     let totalTokens = 0;
     let reservedCalls = 0;
@@ -173,7 +193,7 @@ export class QwenTaskRuntime {
         break;
       }
       const attemptInput = isVisionTask(request.task)
-        ? visionInputForBudget(asVisionInput(request.input), repairInput)
+        ? visionInputForBudget(visionInput!, repairInput)
         : textInput(request.input, index > 0 ? undefined : request.context, request.task, repairInput);
       const inputBudget = assertInputBudget(this.governance, request.task, attemptInput);
       if (totalTokens + inputBudget.inputTokens + maxOutputTokens > this.governance.maxTotalTokensPerOperation) {
@@ -244,12 +264,13 @@ export class QwenTaskRuntime {
         const shadowReservation = shadowInputTokens + maxOutputTokens;
         if (index === 0 && role === 'QWEN_FAST' && reservedCalls < this.governance.maxCallsPerOperation
             && this.shouldShadow()
-            && totalTokens + shadowReservation <= this.governance.maxTotalTokensPerOperation) {
+            && totalTokens + shadowReservation <= this.governance.maxTotalTokensPerOperation
+            && this.backgroundExecutor) {
           // Reserve the optional shadow call before it is detached from this
           // operation so canary traffic cannot bypass the operation ceilings.
           reservedCalls += 1;
           totalTokens += shadowReservation;
-          void this.runShadow(request, shadowInputTokens, maxOutputTokens).catch(() => undefined);
+          this.backgroundExecutor(this.runShadow(request, shadowInputTokens, maxOutputTokens).catch(() => undefined));
         }
         return { value: parsed as T, usage, attempts: index + 1, logicalModel: role, physicalModel: alias.physicalModel };
       } catch (error) {
@@ -310,6 +331,20 @@ export class QwenTaskRuntime {
   private shouldShadow(): boolean {
     return this.governance.shadowCanaryPercent > 0
       && Math.random() * 100 < this.governance.shadowCanaryPercent;
+  }
+
+  private assertImageSize(task: AITask, image: VisionScanParams): void {
+    const estimatedBytes = estimateDecodedImageBytes(image.imageBase64OrUrl);
+    if (estimatedBytes === undefined) return;
+    const limit = task === 'receipt_ocr' || task === 'label_ocr'
+      ? this.governance.maxOcrImageBytes
+      : this.governance.maxImageBytes;
+    if (estimatedBytes > limit) {
+      throw new AIImageTooLargeError(
+        `AI_IMAGE_TOO_LARGE: ${task} image exceeds the ${Math.round(limit / (1024 * 1024))} MiB limit`,
+        task,
+      );
+    }
   }
 
   private async runShadow(

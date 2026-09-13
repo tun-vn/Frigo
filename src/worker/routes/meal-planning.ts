@@ -67,7 +67,10 @@ export function createMealPlanningRoutes(options: MealPlanningServiceOptions = {
   const reads = rateLimiter({ maxRequests: 60, windowSeconds: 60, prefix: 'meal-planning-read' });
   const service = (c: Ctx) => new MealPlanningApplicationService(c.env.DB, {
     ...options,
-    explanationTransport: options.explanationTransport ?? createExplanationTransport(c.env),
+    explanationTransport: options.explanationTransport ?? createExplanationTransport(
+      c.env,
+      (promise) => c.executionCtx.waitUntil(promise),
+    ),
   });
   const scope = (c: Ctx) => ({ householdId: c.get('auth').householdId, userId: c.get('auth').userId });
   const planId = (c: Ctx) => {

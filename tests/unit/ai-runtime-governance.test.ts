@@ -144,7 +144,7 @@ describe('Qwen task runtime governance', () => {
   });
 
   it('records provider usage and centralized estimated cost', async () => {
-    const logs: Array<{ inputTokens: number; outputTokens: number; estimatedCostUsd?: number; task: string }> = [];
+    const logs: Array<{ inputTokens: number; outputTokens: number; estimatedCostUsd?: number; pricingVersion?: string; task: string }> = [];
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response('hello', {
       prompt_tokens: 100, completion_tokens: 25, prompt_tokens_details: { cached_tokens: 40 },
     }));
@@ -156,6 +156,8 @@ describe('Qwen task runtime governance', () => {
     expect(logs[0]?.estimatedCostUsd).toBe(calculateEstimatedCost(
       governance, 'qwen3.7-flash-2026-07-15', 100, 25, 40,
     ));
+    expect(logs[0]?.pricingVersion).toBe('estimate-2026-09-sg-low-context');
+    expect(calculateEstimatedCost(governance, 'qwen3.7-flash', 1_000, 500)).toBeCloseTo(0.000095, 9);
   });
 
   it('uses Qwen Fast for unknown ingredient normalization and rejects unknown IDs', async () => {
@@ -212,17 +214,66 @@ describe('Qwen task runtime governance', () => {
       AI_MAX_TOTAL_TOKENS: '1024',
     }, { qwenOnly: true });
     const logs: Array<{ physicalModel?: string; escalationReason?: string }> = [];
+    const scheduled: Promise<unknown>[] = [];
     const runtime = new QwenTaskRuntime(
-      { qwenApiKey: 'qwen-key', qwenOnly: true, governance },
+      { qwenApiKey: 'qwen-key', qwenOnly: true, governance, backgroundExecutor: (promise) => scheduled.push(promise) },
       (log) => logs.push(log),
     );
 
     await runtime.generate({ task: 'fridge_chat', input: 'hello' });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0];
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(logs.filter((log) => log.escalationReason === 'shadow_canary')).toHaveLength(1);
     expect(logs.find((log) => log.escalationReason === 'shadow_canary')?.physicalModel)
       .toBe('qwen3.7-flash');
+  });
+
+  it('skips shadow work safely when no lifecycle executor is configured', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response('hello'));
+    const governance = createGovernanceConfig({ AI_SHADOW_CANARY_PERCENT: '100' }, { qwenOnly: true });
+    const runtime = new QwenTaskRuntime({ qwenApiKey: 'qwen-key', qwenOnly: true, governance });
+
+    await runtime.generate({ task: 'fridge_chat', input: 'hello' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not schedule shadow work when the canary percentage is zero', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response('hello'));
+    const scheduled: Promise<unknown>[] = [];
+    const governance = createGovernanceConfig({ AI_SHADOW_CANARY_PERCENT: '0' }, { qwenOnly: true });
+    const runtime = new QwenTaskRuntime({
+      qwenApiKey: 'qwen-key', qwenOnly: true, governance,
+      backgroundExecutor: (promise) => scheduled.push(promise),
+    });
+
+    await runtime.generate({ task: 'fridge_chat', input: 'hello' });
+    expect(scheduled).toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['raw base64', 'A'.repeat(100_000)],
+    ['data URL', `data:image/jpeg;base64,${'A'.repeat(100_000)}`],
+  ])('rejects oversized %s images before the provider call', async (_label, image) => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const governance = createGovernanceConfig({}, { qwenOnly: true, maxOcrImageBytes: 64 * 1024 });
+    const runtime = new QwenTaskRuntime({ qwenApiKey: 'qwen-key', qwenOnly: true, governance });
+
+    await expect(runtime.generate({ task: 'receipt_ocr', input: { imageBase64OrUrl: image } }))
+      .rejects.toMatchObject({ code: 'AI_IMAGE_TOO_LARGE', retryable: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('allows a normal-sized vision image', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({
+      items: [{ raw_name: 'Cà chua', estimated_quantity: 1, unit: 'piece', confidence: 0.95 }],
+    }));
+    const runtime = new QwenTaskRuntime({ qwenApiKey: 'qwen-key', qwenOnly: true });
+
+    await expect(runtime.generate({ task: 'fridge_image_analysis', input: { imageBase64OrUrl: 'AQI=' } }))
+      .resolves.toMatchObject({ value: { items: [{ raw_name: 'Cà chua' }] } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

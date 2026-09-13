@@ -15,6 +15,7 @@ import {
 } from '../errors';
 import { resolveProviderCanonical, normalizeOcrNumber } from '../normalization';
 import { findCanonicalIngredient } from '@frigo/domain';
+import { capabilitiesForPhysicalModel, type ModelCapabilities } from '../model-governance';
 
 const DEFAULT_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
 const DEFAULT_MODEL = 'qwen3.7-flash';
@@ -30,6 +31,7 @@ type StandardUnit = 'g' | 'kg' | 'ml' | 'l' | 'piece' | 'pack' | 'bunch' | 'slic
 type QwenProviderOptions = {
   model?: string;
   requestTimeoutMs?: number;
+  capabilities?: ModelCapabilities;
 };
 
 export interface QwenCallOptions {
@@ -257,6 +259,7 @@ export class QwenProvider implements AIProvider {
   private readonly baseUrl: string;
   private readonly model: string;
   private readonly requestTimeoutMs: number;
+  private readonly capabilities: ModelCapabilities;
   private lastUsage: AIProviderUsage | undefined;
 
   constructor(
@@ -264,6 +267,7 @@ export class QwenProvider implements AIProvider {
     baseUrl = DEFAULT_BASE_URL,
     modelOrOptions: string | number | QwenProviderOptions = DEFAULT_MODEL,
     requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    capabilities?: ModelCapabilities,
   ) {
     if (!apiKey.trim()) throw new Error('Qwen API key is required');
     this.apiKey = apiKey;
@@ -273,12 +277,15 @@ export class QwenProvider implements AIProvider {
     if (typeof modelOrOptions === 'number') {
       this.model = DEFAULT_MODEL;
       this.requestTimeoutMs = Math.max(1_000, modelOrOptions);
+      this.capabilities = capabilities || capabilitiesForPhysicalModel(this.model);
     } else if (typeof modelOrOptions === 'string') {
       this.model = modelOrOptions.trim() || DEFAULT_MODEL;
       this.requestTimeoutMs = Math.max(1_000, requestTimeoutMs);
+      this.capabilities = capabilities || capabilitiesForPhysicalModel(this.model);
     } else {
       this.model = modelOrOptions.model?.trim() || DEFAULT_MODEL;
       this.requestTimeoutMs = Math.max(1_000, modelOrOptions.requestTimeoutMs ?? requestTimeoutMs);
+      this.capabilities = modelOrOptions.capabilities || capabilities || capabilitiesForPhysicalModel(this.model);
     }
   }
 
@@ -393,10 +400,10 @@ Bỏ qua dòng không phải thực phẩm và không tự bịa sản phẩm kh
           model: this.model,
           messages,
           temperature: options.temperature ?? 0.1,
-          // Qwen3.7 can spend most of a short OCR request in reasoning. The
-          // structured extraction tasks deliberately use the fast path.
-          enable_thinking: false,
-          ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+          ...(this.capabilities.supportsThinkingControl ? { enable_thinking: false } : {}),
+          ...(options.jsonMode && this.capabilities.supportsJsonResponseFormat
+            ? { response_format: { type: 'json_object' } }
+            : {}),
           ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens }),
         }),
       });

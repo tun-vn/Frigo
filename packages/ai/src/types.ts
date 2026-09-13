@@ -52,6 +52,8 @@ export interface AIConfig {
   /** New runtime policy; defaults to Qwen-only when a Qwen key is configured. */
   qwenOnly?: boolean;
   governance?: AIGovernanceConfig;
+  /** Schedule non-critical work within the host lifecycle (for example waitUntil). */
+  backgroundExecutor?: (promise: Promise<unknown>) => void;
   aiGatewayUrl?: string;
   aiBinding?: any;
 }

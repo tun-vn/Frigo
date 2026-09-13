@@ -37,6 +37,44 @@ describe('QwenProvider', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).model).toBe('qwen3.7-flash-preview');
   });
 
+  it('does not send provider structured-output options to qwen-vl-ocr', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({
+      items: [{ raw_name: 'Cà chua', estimated_quantity: 1, unit: 'piece', confidence: 0.95 }],
+    }));
+
+    await new QwenProvider('secret', undefined, 'qwen-vl-ocr').receiptScan({ imageBase64OrUrl: 'AQI=' });
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body).not.toHaveProperty('response_format');
+    expect(body).not.toHaveProperty('enable_thinking');
+  });
+
+  it('keeps provider structured output enabled for supported multimodal models', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({
+      items: [{ raw_name: 'Cà chua', estimated_quantity: 1, unit: 'piece', confidence: 0.95 }],
+    }));
+
+    await new QwenProvider('secret', undefined, 'qwen3.8-flash').vision({ imageBase64OrUrl: 'AQI=' });
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('parses OCR JSON text at the application layer without provider structured output', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(
+      '```json\n{"items":[{"raw_name":"Cà chua","estimated_quantity":1,"unit":"piece","confidence":0.95}]}\n```',
+    ));
+
+    await expect(new QwenProvider('secret', undefined, 'qwen-vl-ocr').receiptScan({ imageBase64OrUrl: 'AQI=' }))
+      .resolves.toMatchObject({ items: [{ raw_name: 'Cà chua', confidence: 0.95 }] });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty('response_format');
+  });
+
+  it('fails closed when OCR returns malformed JSON text', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response('{not-json'));
+
+    await expect(new QwenProvider('secret', undefined, 'qwen-vl-ocr').receiptScan({ imageBase64OrUrl: 'AQI=' }))
+      .rejects.toMatchObject({ code: 'INVALID_RESPONSE', retryable: false });
+  });
+
   it('normalizes Qwen-style receipt aliases and numeric confidence percentages', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({
       storeName: 'WinMart',
@@ -83,6 +121,26 @@ describe('QwenProvider', () => {
 
     await expect(new QwenProvider('secret').receiptScan({ imageBase64OrUrl: 'AQI=' })).rejects.toMatchObject({
       code: 'MODEL_NOT_FOUND', retryable: false,
+    });
+  });
+
+  it.each([
+    [401, 'invalid api key', 'AUTHENTICATION_FAILED', false],
+    [403, 'permission denied', 'PERMISSION_DENIED', false],
+    [429, 'rate limit exceeded', 'RATE_LIMITED', true],
+  ] as const)('keeps Qwen auth, permission, and rate-limit errors distinct (%i)', async (status, detail, code, retryable) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(detail, { status }));
+
+    await expect(new QwenProvider('secret').receiptScan({ imageBase64OrUrl: 'AQI=' })).rejects.toMatchObject({
+      code, retryable,
+    });
+  });
+
+  it('does not classify an unrelated bad request as a missing model', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('unsupported parameter response_format', { status: 400 }));
+
+    await expect(new QwenProvider('secret').receiptScan({ imageBase64OrUrl: 'AQI=' })).rejects.toMatchObject({
+      code: 'PROVIDER_REQUEST_REJECTED', retryable: false,
     });
   });
 });

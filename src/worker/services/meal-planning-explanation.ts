@@ -29,16 +29,17 @@ export function createExplanationTransport(env: Pick<Env,
   | 'AI_ALLOW_REASONING_MODEL' | 'AI_ALLOW_JUDGE_MODEL'
   | 'AI_MAX_CALLS_PER_OPERATION' | 'AI_MAX_TOTAL_TOKENS' | 'AI_MAX_INPUT_TOKENS'
   | 'AI_MAX_OUTPUT_TOKENS' | 'AI_SHADOW_CANARY_PERCENT' | 'AI_MODEL_FAST'
+  | 'AI_MAX_IMAGE_BYTES' | 'AI_MAX_OCR_IMAGE_BYTES'
   | 'AI_MODEL_FAST_CANARY' | 'AI_MODEL_MULTIMODAL' | 'AI_MODEL_OCR'
   | 'AI_MODEL_REASONING' | 'AI_MODEL_JUDGE'
->): ExplanationTransport | undefined {
+>, backgroundExecutor?: (promise: Promise<unknown>) => void): ExplanationTransport | undefined {
   const binding: unknown = env.AI;
   if (env.AI_MOCK_MODE === 'true') return undefined;
 
   // Qwen is the primary text model when configured; retain the native binding
   // path for older environments that have not provisioned the Qwen secret yet.
   if (env.QWEN_API_KEY?.trim()) {
-    const config = aiConfigFromEnv(env as unknown as Env);
+    const config = aiConfigFromEnv(env as unknown as Env, backgroundExecutor);
     const router = new AIRouter({
       ...config,
       qwenRequestTimeoutMs: Math.min(config.qwenRequestTimeoutMs ?? EXPLANATION_TIMEOUT_MS, EXPLANATION_TIMEOUT_MS),

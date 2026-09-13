@@ -35,7 +35,7 @@ function scanFailureCode(error: unknown): string {
     return (error as { code: string }).code;
   }
   const message = error instanceof Error ? error.message : String(error);
-  const explicit = message.match(/\b(?:AI_SCAN_[A-Z_]+|AI_BUDGET_EXCEEDED|AI_ESCALATION_EXHAUSTED|AI_UNAVAILABLE|REQUEST_TIMEOUT|NETWORK_ERROR|RATE_LIMITED|UPSTREAM_ERROR|MODEL_NOT_FOUND|AUTHENTICATION_FAILED|PERMISSION_DENIED|LICENSE_REQUIRED|INVALID_RESPONSE|SCHEMA_VALIDATION|IMAGE_NOT_FOUND|IMAGE_UNAVAILABLE)\b/);
+  const explicit = message.match(/\b(?:AI_SCAN_[A-Z_]+|AI_BUDGET_EXCEEDED|AI_ESCALATION_EXHAUSTED|AI_UNAVAILABLE|AI_IMAGE_TOO_LARGE|REQUEST_TIMEOUT|NETWORK_ERROR|RATE_LIMITED|UPSTREAM_ERROR|MODEL_NOT_FOUND|AUTHENTICATION_FAILED|PERMISSION_DENIED|LICENSE_REQUIRED|INVALID_RESPONSE|SCHEMA_VALIDATION|IMAGE_NOT_FOUND|IMAGE_UNAVAILABLE)\b/);
   if (explicit?.[0]) return explicit[0];
   if (/timeout|timed out|abort/i.test(message)) return 'REQUEST_TIMEOUT';
   if (/network|fetch failed|connection reset|econn/i.test(message)) return 'NETWORK_ERROR';
@@ -154,6 +154,8 @@ function publicScanErrorMessage(code: unknown): string | undefined {
     case 'PERMISSION_DENIED':
     case 'LICENSE_REQUIRED':
       return 'Dịch vụ nhận diện đang tạm thời không khả dụng. Vui lòng thử lại sau hoặc nhập thủ công.';
+    case 'AI_IMAGE_TOO_LARGE':
+      return 'Ảnh quá lớn để xử lý nhanh. Vui lòng chọn ảnh nhỏ hơn 5MB hoặc chụp lại với độ phân giải thấp hơn.';
     case 'INVALID_RESPONSE':
     case 'SCHEMA_VALIDATION':
       return 'Không nhận diện được dữ liệu đủ rõ từ ảnh. Vui lòng chụp lại gần hơn, đủ sáng và không bị lóa.';
@@ -169,12 +171,13 @@ function publicScanErrorMessage(code: unknown): string | undefined {
   }
 }
 
-function scanFailureStatus(code: string): 400 | 422 | 429 | 500 | 503 | 504 {
+function scanFailureStatus(code: string): 400 | 413 | 422 | 429 | 500 | 503 | 504 {
   if (code === 'RATE_LIMITED') return 429;
   if (code === 'REQUEST_TIMEOUT' || code === 'AI_SCAN_TIMEOUT') return 504;
   if (code === 'AI_SCAN_NO_USABLE_ITEMS' || code === 'INVALID_RESPONSE' || code === 'SCHEMA_VALIDATION') return 422;
   if (code === 'IMAGE_NOT_FOUND' || code === 'IMAGE_UNAVAILABLE') return 400;
   if (code === 'AI_BUDGET_EXCEEDED') return 422;
+  if (code === 'AI_IMAGE_TOO_LARGE') return 413;
   if (RETRYABLE_SCAN_CODES.has(code) || code === 'MODEL_NOT_FOUND' || code === 'AUTHENTICATION_FAILED' ||
       code === 'PERMISSION_DENIED' || code === 'LICENSE_REQUIRED' || code === 'RESERVATION_EXPIRED') return 503;
   return 500;
@@ -310,19 +313,26 @@ scanRoutes.use('/scans/fridge', rateLimiter({ maxRequests: 12, windowSeconds: 60
 scanRoutes.use('/scans/receipt', rateLimiter({ maxRequests: 12, windowSeconds: 60, prefix: 'rl_receipt' }));
 
 // Helper to init AI Router with Cloudflare Workers AI GPU binding
-function getAIRouter(env: Env) {
-  return new AIRouter(aiConfigFromEnv(env), logAIUsage);
+function getAIRouter(env: Env, backgroundExecutor?: (promise: Promise<unknown>) => void) {
+  return new AIRouter(aiConfigFromEnv(env, backgroundExecutor), logAIUsage);
 }
 
-// Helper: validate base64 size (max 5MB)
-function validateBase64Payload(base64: string): { valid: boolean; error?: string } {
+// Keep the HTTP rejection aligned with the runtime's configured image budget.
+function validateBase64Payload(base64: string, maxBytes = 5 * 1024 * 1024): { valid: boolean; error?: string } {
   if (!base64) return { valid: false, error: 'Vui lòng tải lên một ảnh để quét' };
   // Approximate size in bytes: length * (3/4)
   const estimatedBytes = (base64.length * 3) / 4;
-  if (estimatedBytes > 5 * 1024 * 1024) {
-    return { valid: false, error: 'Dung lượng ảnh vượt quá giới hạn cho phép (tối đa 5MB)' };
+  if (estimatedBytes > maxBytes) {
+    return { valid: false, error: `Dung lượng ảnh vượt quá giới hạn cho phép (tối đa ${Math.round(maxBytes / (1024 * 1024))}MB)` };
   }
   return { valid: true };
+}
+
+function configuredImageLimit(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed)
+    ? Math.min(20 * 1024 * 1024, Math.max(64 * 1024, parsed))
+    : 5 * 1024 * 1024;
 }
 
 type NormalizedImagePayload = {
@@ -584,7 +594,7 @@ scanRoutes.post('/scans/fridge', async (c) => {
   }
 
   // SEC-08 FIX: Check payload size limit before reserving quota.
-  const sizeCheck = validateBase64Payload(image.base64);
+  const sizeCheck = validateBase64Payload(image.base64, configuredImageLimit(c.env.AI_MAX_IMAGE_BYTES));
   if (!sizeCheck.valid) {
     return c.json({ error: sizeCheck.error, code: 'PAYLOAD_TOO_LARGE' }, 413);
   }
@@ -682,7 +692,7 @@ scanRoutes.post('/scans/fridge', async (c) => {
   // 75-second request budget.
   let visionResult;
   try {
-    const aiRouter = getAIRouter(c.env);
+    const aiRouter = getAIRouter(c.env, (promise) => c.executionCtx.waitUntil(promise));
     visionResult = await withScanTimeout(
       aiRouter.vision({ imageBase64OrUrl: image.dataUrl, mimeType: image.mimeType }),
       75_000,
@@ -794,7 +804,7 @@ scanRoutes.post('/scans/receipt', async (c) => {
   }
 
   // SEC-08 FIX: Check payload size limit before reserving quota.
-  const sizeCheck = validateBase64Payload(image.base64);
+  const sizeCheck = validateBase64Payload(image.base64, configuredImageLimit(c.env.AI_MAX_OCR_IMAGE_BYTES));
   if (!sizeCheck.valid) {
     return c.json({ error: sizeCheck.error, code: 'PAYLOAD_TOO_LARGE' }, 413);
   }
@@ -892,7 +902,7 @@ scanRoutes.post('/scans/receipt', async (c) => {
 
   let receiptResult;
   try {
-    const aiRouter = getAIRouter(c.env);
+    const aiRouter = getAIRouter(c.env, (promise) => c.executionCtx.waitUntil(promise));
     receiptResult = await withScanTimeout(
       aiRouter.receiptScan({ imageBase64OrUrl: image.dataUrl, mimeType: image.mimeType }),
       75_000,

@@ -50,6 +50,17 @@ export class AIBudgetExceededError extends AIProviderError {
   }
 }
 
+/** A vision payload rejected before any provider request is made. */
+export class AIImageTooLargeError extends AIProviderError {
+  readonly task?: string;
+
+  constructor(message: string, task?: string) {
+    super(message, { code: 'AI_IMAGE_TOO_LARGE', retryable: false, provider: 'governance' });
+    this.name = 'AIImageTooLargeError';
+    this.task = task;
+  }
+}
+
 export class AIEscalationExhaustedError extends AIProviderError {
   readonly task?: string;
 

@@ -52,6 +52,8 @@ export interface Env {
   AI_MAX_TOTAL_TOKENS?: string;
   AI_MAX_INPUT_TOKENS?: string;
   AI_MAX_OUTPUT_TOKENS?: string;
+  AI_MAX_IMAGE_BYTES?: string;
+  AI_MAX_OCR_IMAGE_BYTES?: string;
   AI_SHADOW_CANARY_PERCENT?: string;
   AI_MODEL_FAST?: string;
   AI_MODEL_FAST_CANARY?: string;
