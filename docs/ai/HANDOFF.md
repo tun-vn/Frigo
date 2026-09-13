@@ -298,6 +298,11 @@ Inventory safety is unchanged: AI returns observation/candidate data only. The
 existing normalization, validation, review, reconciliation, fencing and
 idempotent inventory command remain the sole authority for mutations.
 
+Final T08-T12 Inventory Truth end-to-end certification is still pending the
+later unification with the separate `frigo-dev` lineage. This candidate does
+not import that code or migrations; it only proves that Qwen runtime/provider
+modules have no direct authoritative inventory mutation path.
+
 Offline evaluation assets are `tests/fixtures/ai-golden.json`,
 `tests/unit/ai-golden-dataset.test.ts` and `scripts/ai-eval.mjs`; run
 `pnpm ai:eval -- --dry-run`. The command makes no live provider call and no CI
@@ -311,15 +316,31 @@ Verification recorded for this checkpoint:
   skipped because no release flags were supplied.
 - `pnpm ai:eval -- --dry-run`: PASS; fixture-only report, no Alibaba/Qwen call.
 - `git diff --check`: PASS after the documentation edits.
-- Focused governance/configuration/explanation suite: 102/102 PASS after the
-  shadow reservation guard; queue/idempotency regression coverage remains green.
+- Focused command (`pnpm vitest run tests/unit/ai-runtime-governance.test.ts
+  tests/unit/ai-router.test.ts tests/unit/qwen-provider.test.ts
+  tests/unit/config-validation.test.ts tests/unit/meal-planning-explanation.test.ts
+  tests/unit/scan-privacy.test.tsx tests/integration/scan-queue-retry-policy.test.ts
+  tests/integration/scan-async-canary.test.ts`): **119 tests / 8 files PASS**;
+  queue/idempotency regression coverage remains green.
 - `pnpm audit --prod`: FAIL (2 moderate `react-router` advisories; patched
   upstream at `>=7.18.0`). This pre-existing dependency follow-up is outside
   the Qwen runtime scope; no package upgrade was made in this checkpoint.
 - Secret scan, protected-path scan and provider/model search were clean. No
   PayOS/payment, unrelated auth, remote migration, merge or deployment action
   was performed.
+- Local `main` is a separate divergent ref (`f6a48a1`); canonical source for
+  this candidate is `github-frigo/main` at `05423f2`, and no local ref was
+  changed.
+- Final review found no concrete runtime defect requiring a code fix. Readiness
+  already probes the additive scan columns from migration `0023`, and the
+  deployment documentation correctly scopes the native `AI` binding to the
+  explicit `CLOUDFLARE_VISION_FALLBACK=true` path.
+- Publication checkpoint: the canonical remote has no existing
+  `feat/qwen-ai-runtime-cost-router` branch, so the next action is a normal
+  non-force push and `git ls-remote` SHA verification. No merge, deployment,
+  remote migration or production change has occurred.
 
-Next action: request code review or a separately authorized Qwen benchmark, then
-promote a pinned alias only through the documented golden-dataset process. Do
-not merge, migrate remotely or deploy from this branch.
+Next action after publication: request code review or a separately authorized
+Qwen benchmark, then promote a pinned alias only through the documented
+golden-dataset process. Do not merge, migrate remotely or deploy from this
+branch.

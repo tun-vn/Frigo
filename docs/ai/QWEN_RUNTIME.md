@@ -73,6 +73,12 @@ existing reconciliation and fenced inventory command`.
 Quantities, unit conversion, expiry ordering, prices, budget arithmetic and
 duplicate detection stay deterministic.
 
+This candidate does not claim final T08-T12 Inventory Truth integration: that
+lineage remains in the separate `frigo-dev` development repository. After the
+later repository unification, the complete AI -> Inventory Observation ->
+Reconciliation -> Inventory Truth path must be recertified. This branch only
+guarantees that its Qwen runtime has no authoritative inventory mutation path.
+
 ## Configuration
 
 The safe production values are versioned in `wrangler.jsonc`; local and staging

@@ -247,6 +247,10 @@ The deployed receipt is anchored to main SHA
   server-side AI config helper. Legacy non-Qwen adapters remain only for
   compatibility when Qwen-only mode is not selected; they are not constructed
   by the production path.
+- Inventory boundary is intentionally limited to this repository: the final
+  T08-T12 Inventory Truth AI-to-observation-to-reconciliation certification is
+  pending later unification with `frigo-dev`; no code or migrations were
+  imported from that lineage.
 - Offline golden fixtures and `pnpm ai:eval -- --dry-run` were added. No live
   Alibaba request is made by tests or CI. Optional shadow traffic is disabled
   by default and now reserves its call/token budget before launching.
@@ -254,8 +258,14 @@ The deployed receipt is anchored to main SHA
   lint, typecheck, migration replay and production build all PASS. The check
   intentionally skipped remote D1 schema and Week parity because no release
   flag was supplied. `pnpm ai:eval -- --dry-run` and `git diff --check` PASS.
+- Focused recertification command covered Qwen runtime/provider, router,
+  configuration, explanation, image privacy and scan queue paths: **119 tests /
+  8 files PASS**. No concrete runtime defect was found during the final review;
+  readiness already probes the additive scan columns from migration `0023`.
 - `pnpm audit --prod` remains a known non-blocking follow-up: two moderate
   `react-router` advisories are fixed upstream at `>=7.18.0`; this task did not
   change dependencies.
-- Next action: request code review or a separately authorized benchmark. Do not
-  merge, migrate remotely or deploy this branch.
+- Canonical remote publication is pending: `github-frigo` has no existing
+  candidate branch, so the next action is a normal non-force push followed by
+  remote SHA verification. Do not merge, migrate remotely or deploy this
+  branch.

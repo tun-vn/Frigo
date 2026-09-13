@@ -163,3 +163,29 @@ The candidate branch is based on canonical main SHA
 `05423f2ad675006a4c7913e696f1979b3fcaae59`; canonical main and production
 remain untouched. Reasoning and judge roles are disabled by default, and the
 rolling `qwen3.7-flash` alias is canary-only.
+
+## Qwen candidate recertification and publication checkpoint (2026-09-13)
+
+- Review result: **NO CONCRETE CODE DEFECT FOUND**. Retry ownership is bounded
+  by `QwenTaskRuntime`; operation token/call budgets are cumulative; production
+  Qwen-only composition fails closed; structured output, quality gates,
+  telemetry and Worker AbortSignal handling remain intact. Legacy providers are
+  retained only for explicit compatibility paths.
+- Focused command: `pnpm vitest run tests/unit/ai-runtime-governance.test.ts tests/unit/ai-router.test.ts tests/unit/qwen-provider.test.ts tests/unit/config-validation.test.ts tests/unit/meal-planning-explanation.test.ts tests/unit/scan-privacy.test.tsx tests/integration/scan-queue-retry-policy.test.ts tests/integration/scan-async-canary.test.ts` - **119 tests / 8 files PASS**.
+- Full command: `pnpm check` - **1,606 tests / 95 files PASS**; lint,
+  typecheck, migration replay and production build PASS. Remote D1 schema and
+  Week parity checks were intentionally skipped without release flags.
+- Offline command: `pnpm ai:eval -- --dry-run` - PASS; six fixture cases,
+  no live Alibaba/Qwen request. `git diff --check` - PASS.
+- Audit command: `pnpm audit --prod` - FAIL with two pre-existing moderate
+  `react-router` advisories, patched upstream at `>=7.18.0`; no dependency
+  upgrade is in this candidate.
+- Documentation updated in `docs/ai/CURRENT_STATE.md`,
+  `docs/ai/HANDOFF.md` and `docs/ai/QWEN_RUNTIME.md` to state the pending
+  post-unification T08-T12 Inventory Truth recertification and the unchanged
+  production boundary. Local `main` remains `f6a48a1`; canonical main remains
+  `github-frigo/main` at `05423f2`.
+- Publication status: branch is not yet present on `github-frigo`; next action
+  is a normal non-force push of `feat/qwen-ai-runtime-cost-router`, followed by
+  remote SHA verification. Do not merge, deploy, migrate remotely or alter
+  production.
